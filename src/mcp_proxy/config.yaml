@@ -1,0 +1,17 @@
+database:
+  url: "mysql+aiomysql://root:mingguang@localhost:3306/mcp_proxy"
+
+redis:
+  url: "redis://localhost:6379/0"
+
+server:
+  name: mcp-proxy-server
+  base_url: http://localhost:7080
+
+auth:
+  enabled: false
+  token: ""
+
+session:
+  ttl_seconds: 1800
+  key_prefix: "mcp:session:"
