@@ -13,71 +13,26 @@ MCP Streamable HTTP / JSON-RPC 端点
 import asyncio
 import json
 import time
-import uuid
-from typing import Any, AsyncGenerator
-
+from loguru import logger
+from typing import AsyncGenerator
 from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
-from loguru import logger
 
-from mcp_proxy.api.schemas import (
-    HealthResponse,
-    JsonRpcError,
-    JsonRpcResponse,
-)
-from mcp_proxy.config import settings
-from mcp_proxy.service.register_mcp import RegisterMcpService
+from mcp_proxy.service.json_rpc import rpc_error, rpc_ok, check_auth, sse_event, sse_ping, process_jsonrpc
+from mcp_proxy.schemas.json_rpc import HealthResponse
 from mcp_proxy.service.session.manager import SessionManager
 from mcp_proxy.service.session.models import ClientCapabilities, ClientInfo
+from mcp_proxy.config import settings
 
-router = APIRouter(prefix="/mcp")
+router = APIRouter(prefix="/mcp", tags=["Mcp-Streamable-Http"])
 
 # session_id -> asyncio.Queue，用于服务端向 GET SSE 长连接推送通知
-# 注意：多进程部署时需替换为 Redis 等外部队列
 _sse_queues: dict[str, asyncio.Queue] = {}
 
 
-# 依赖 & 工具函数
+# 依赖函数
 def get_session_manager(request: Request) -> SessionManager:
     return request.app.state.session_manager
-
-
-def _check_auth(request: Request) -> bool:
-    """支持 Query token 和 Bearer token 两种鉴权方式"""
-    if not settings.auth_enabled:
-        return True
-    token = settings.auth_token
-    if not token:
-        return False
-    if request.query_params.get("token") == token:
-        return True
-    bearer = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
-    return bearer == token
-
-
-def _rpc_ok(rpc_id: Any, result: Any) -> JsonRpcResponse:
-    return JsonRpcResponse(id=rpc_id, result=result)
-
-
-def _rpc_error(
-    rpc_id: Any,
-    code: int,
-    message: str,
-    data: str | None = None,
-) -> JsonRpcResponse:
-    return JsonRpcResponse(
-        id=rpc_id,
-        error=JsonRpcError(code=code, message=message, data=data),
-    )
-
-
-def _sse_event(data: dict) -> str:
-    """将 dict 序列化为标准 SSE 格式文本"""
-    return f"event: message\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
-
-
-def _sse_ping() -> str:
-    return f"event: ping\ndata: {json.dumps({'timestamp': int(time.time() * 1000)})}\n\n"
 
 
 # POST /{server_key}  ——  主入口，处理所有 JSON-RPC 请求
@@ -95,18 +50,18 @@ async def streamable_http_endpoint(
     - 其余方法：必须携带 Mcp-Session-Id Header
     - 响应格式由 Accept Header 决定（json / text/event-stream）
     """
-    if not _check_auth(request):
+    if not check_auth(request):
         return JSONResponse(
-            _rpc_error(None, -32001, "Authentication failed").model_dump(),
+            rpc_error(None, -32001, "Authentication failed").model_dump(),
             status_code=401,
         )
 
-    # ---------- 解析请求体 ----------
+    # 解析请求体
     try:
         payload = json.loads(await request.body())
     except json.JSONDecodeError as e:
         return JSONResponse(
-            _rpc_error(None, -32700, "Parse error", str(e)).model_dump(),
+            rpc_error(None, -32700, "Parse error", str(e)).model_dump(),
             status_code=400,
         )
 
@@ -117,7 +72,7 @@ async def streamable_http_endpoint(
 
     logger.info(f"Streamable HTTP POST: method={method}, server={server_key}, accept={accept}")
 
-    # ---------- initialize：创建 session ----------
+    # initialize：创建 session
     if method == "initialize":
         client_info_raw = params.get("clientInfo", {})
         capabilities_raw = params.get("capabilities", {})
@@ -139,7 +94,7 @@ async def streamable_http_endpoint(
             f"client={client_info_raw.get('name', 'unknown')} v{client_info_raw.get('version', 'unknown')}"
         )
 
-        response_body = _rpc_ok(
+        response_body = rpc_ok(
             rpc_id,
             {
                 "protocolVersion": "2024-11-05",
@@ -159,30 +114,30 @@ async def streamable_http_endpoint(
             headers={"Mcp-Session-Id": session.session_id},
         )
 
-    # ---------- 非 initialize：必须有 session ----------
+    # 非 initialize：必须有 session
     session_id = request.headers.get("Mcp-Session-Id")
     if not session_id:
         return JSONResponse(
-            _rpc_error(rpc_id, -32000, "Missing session", "Mcp-Session-Id header is required").model_dump(),
+            rpc_error(rpc_id, -32000, "Missing session", "Mcp-Session-Id header is required").model_dump(),
             status_code=400,
         )
 
     session = await sm.get_session(session_id)
     if not session:
         return JSONResponse(
-            _rpc_error(rpc_id, -32000, "Session not found").model_dump(),
+            rpc_error(rpc_id, -32000, "Session not found").model_dump(),
             status_code=404,
         )
 
     if session.server_name != server_key:
         return JSONResponse(
-            _rpc_error(rpc_id, -32000, "Session mismatch").model_dump(),
+            rpc_error(rpc_id, -32000, "Session mismatch").model_dump(),
             status_code=400,
         )
 
     await sm.touch_session(session_id)
 
-    # ---------- 根据 Accept 头决定响应方式 ----------
+    # 根据 Accept 头决定响应方式
     if "text/event-stream" in accept:
         return await _handle_streaming_response(server_key, session_id, payload)
     else:
@@ -202,7 +157,7 @@ async def sse_listen_endpoint(
 
     客户端必须先通过 POST initialize 拿到 session ID，再建立此连接。
     """
-    if not _check_auth(request):
+    if not check_auth(request):
         return Response(content="Authentication failed", status_code=401)
 
     accept = request.headers.get("Accept", "")
@@ -240,10 +195,10 @@ async def sse_listen_endpoint(
                     break
                 try:
                     item: dict = await asyncio.wait_for(queue.get(), timeout=30.0)
-                    yield _sse_event(item).encode()
+                    yield sse_event(item).encode()
                 except asyncio.TimeoutError:
                     # 心跳，保持连接
-                    yield _sse_ping().encode()
+                    yield sse_ping().encode()
         finally:
             _sse_queues.pop(session_id, None)
             logger.info(f"SSE listen cleanup: session={session_id}")
@@ -266,29 +221,29 @@ async def close_session_endpoint(
     request: Request,
     sm: SessionManager = Depends(get_session_manager),
 ):
-    if not _check_auth(request):
+    if not check_auth(request):
         return JSONResponse(
-            _rpc_error(None, -32001, "Authentication failed").model_dump(),
+            rpc_error(None, -32001, "Authentication failed").model_dump(),
             status_code=401,
         )
 
     session_id = request.headers.get("Mcp-Session-Id")
     if not session_id:
         return JSONResponse(
-            _rpc_error(None, -32000, "Missing session", "Mcp-Session-Id header is required").model_dump(),
+            rpc_error(None, -32000, "Missing session", "Mcp-Session-Id header is required").model_dump(),
             status_code=400,
         )
 
     session = await sm.get_session(session_id)
     if not session:
         return JSONResponse(
-            _rpc_error(None, -32000, "Session not found").model_dump(),
+            rpc_error(None, -32000, "Session not found").model_dump(),
             status_code=404,
         )
 
     if session.server_name != server_key:
         return JSONResponse(
-            _rpc_error(None, -32000, "Session mismatch").model_dump(),
+            rpc_error(None, -32000, "Session mismatch").model_dump(),
             status_code=400,
         )
 
@@ -300,7 +255,6 @@ async def close_session_endpoint(
 
 
 # Health
-
 @router.get("/{server_key}/health", response_model=HealthResponse)
 async def health_check(server_key: str):
     return HealthResponse(
@@ -321,7 +275,7 @@ async def _handle_json_response(
     客户端 Accept: application/json 时，直接在 HTTP 响应体返回结果。
     notifications/* 类通知无需响应，返回 204。
     """
-    response = await _process_jsonrpc(server_key, session_id, payload)
+    response = await process_jsonrpc(server_key, session_id, payload)
     if response is None:
         return Response(status_code=204)
 
@@ -342,9 +296,9 @@ async def _handle_streaming_response(
     适用于 tools/call 等可能产生渐进式输出的方法。
     """
     async def generator() -> AsyncGenerator[bytes, None]:
-        response = await _process_jsonrpc(server_key, session_id, payload)
+        response = await process_jsonrpc(server_key, session_id, payload)
         if response is not None:
-            yield _sse_event(response.model_dump(exclude_none=True)).encode()
+            yield sse_event(response.model_dump(exclude_none=True)).encode()
 
     return StreamingResponse(
         generator(),
@@ -355,57 +309,6 @@ async def _handle_streaming_response(
             "Mcp-Session-Id": session_id,
         },
     )
-
-
-# 内部：JSON-RPC 方法路由
-async def _process_jsonrpc(
-    server_key: str,
-    session_id: str,
-    payload: dict,
-) -> JsonRpcResponse | None:
-    method = payload.get("method", "")
-    params = payload.get("params") or {}
-    rpc_id = payload.get("id")
-
-    logger.info(f"JSON-RPC method={method} server={server_key} session={session_id}")
-
-    if method == "tools/list":
-        return await _handle_tools_list(server_key, rpc_id)
-    elif method == "tools/call":
-        return await _handle_tools_call(server_key, rpc_id, params)
-    elif method == "ping":
-        return _rpc_ok(rpc_id, {})
-    elif method == "notifications/initialized":
-        # 客户端确认初始化完成，无需响应
-        logger.info(f"Client initialized: session={session_id}")
-        return None
-    else:
-        return _rpc_error(rpc_id, -32601, "Method not found", method)
-
-
-async def _handle_tools_list(server_key: str, rpc_id: Any) -> JsonRpcResponse:
-    try:
-        tools = await RegisterMcpService.get_tools_for_server(server_key)
-        return _rpc_ok(rpc_id, {"tools": tools})
-    except Exception as e:
-        logger.error(f"tools/list failed: {e}")
-        return _rpc_error(rpc_id, -32603, "Internal error", str(e))
-
-
-async def _handle_tools_call(server_key: str, rpc_id: Any, params: dict) -> JsonRpcResponse:
-    tool_name = params.get("name")
-    if not tool_name:
-        return _rpc_error(rpc_id, -32602, "Invalid params", "name is required")
-    try:
-        result = await RegisterMcpService.call_tool(
-            server_key,
-            tool_name,
-            params.get("arguments", {}),
-        )
-        return _rpc_ok(rpc_id, result)
-    except Exception as e:
-        logger.exception(f"tools/call failed: {e}")
-        return _rpc_error(rpc_id, -32603, "Internal error", str(e))
 
 
 # ---------------------------------------------------------------------------

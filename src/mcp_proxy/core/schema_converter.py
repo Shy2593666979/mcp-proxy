@@ -33,8 +33,8 @@ def parse_input_schema(parameters: str | None) -> dict:
 def _parse_openapi_schema(schema: dict) -> dict:
     properties: dict[str, Any] = {}
     required: list[str] = []
-    param_required_map: dict[str, list[str]] = {}
 
+    # 处理 OpenAPI parameters (path, query, header, cookie)
     for param in schema.get("parameters", []):
         in_ = param.get("in", "query")
         name = param.get("name", "")
@@ -45,53 +45,80 @@ def _parse_openapi_schema(schema: dict) -> dict:
         default_val = param_schema.get("default")
 
         if is_required:
-            param_required_map.setdefault(in_, []).append(name)
+            required.append(name)
 
-        if in_ not in properties:
-            properties[in_] = {"type": "object", "properties": {}}
-
-        prop_def: dict = {"type": param_type, "description": description}
+        prop_def: dict[str, Any] = {
+            "type": param_type,
+            "description": description,
+            "x-position": in_,  # 保存参数位置信息
+        }
         if default_val is not None:
             prop_def["default"] = default_val
-        properties[in_]["properties"][name] = prop_def
+        if param_type == "array" and param_schema.get("items") is not None:
+            prop_def["items"] = param_schema.get("items")
 
-    for in_, req_list in param_required_map.items():
-        properties[in_]["required"] = req_list
-        required.append(in_)
+        properties[name] = prop_def
 
+    # 处理 requestBody
     request_body = schema.get("requestBody")
     if request_body:
         content = request_body.get("content", {})
-        rb_map: dict = {}
+
         for content_type_full, content_def in content.items():
             content_type = content_type_full.split(";")[0].strip()
             rb_schema = content_def.get("schema", {})
             rb_type = rb_schema.get("type", "object")
 
             if content_type in ("application/json", "application/x-www-form-urlencoded"):
-                rb_map["type"] = rb_type
-                rb_required = rb_schema.get("required")
-                if rb_required:
-                    rb_map["required"] = rb_required
-                    required.append("requestBody")
+                # requestBody 是 object - 扁平化到顶层
                 if rb_type == "object":
-                    rb_props = {}
+                    rb_required = rb_schema.get("required", [])
                     for pname, pdef in rb_schema.get("properties", {}).items():
-                        entry = {
+                        entry: dict[str, Any] = {
                             "type": pdef.get("type", "string"),
-                            "description": pdef.get("description", pname),
+                            "description": pdef.get("description", ""),
+                            "x-position": "body",  # 标记为 body 参数
                         }
-                        if pdef.get("type") == "array":
+                        if pdef.get("type") == "array" and pdef.get("items") is not None:
                             entry["items"] = pdef.get("items")
-                        rb_props[pname] = entry
-                    rb_map["properties"] = rb_props
-                elif rb_type == "array":
-                    rb_map["items"] = rb_schema.get("items")
-            elif content_type == "application/octet-stream":
-                rb_map["type"] = "string"
+                        if "default" in pdef:
+                            entry["default"] = pdef.get("default")
 
-        if rb_map:
-            properties["requestBody"] = rb_map
+                        properties[pname] = entry
+
+                    for name in rb_required:
+                        if name not in required:
+                            required.append(name)
+
+                # requestBody 不是 object，保留 requestBody 字段
+                elif rb_type == "array":
+                    properties["requestBody"] = {
+                        "type": "array",
+                        "items": rb_schema.get("items"),
+                        "x-position": "body",
+                    }
+                    if request_body.get("required", False) and "requestBody" not in required:
+                        required.append("requestBody")
+
+                else:
+                    properties["requestBody"] = {
+                        "type": rb_type,
+                        "x-position": "body",
+                    }
+                    if request_body.get("required", False) and "requestBody" not in required:
+                        required.append("requestBody")
+
+                break
+
+            elif content_type == "application/octet-stream":
+                properties["requestBody"] = {
+                    "type": "string",
+                    "description": "Binary file content",
+                    "x-position": "body",
+                }
+                if request_body.get("required", False) and "requestBody" not in required:
+                    required.append("requestBody")
+                break
 
     return {
         "type": "object",
@@ -102,11 +129,21 @@ def _parse_openapi_schema(schema: dict) -> dict:
 
 
 def tool_to_mcp_schema(tool) -> dict:
-    """将 Tool ORM 对象转换为 MCP tool schema dict"""
+    """将 Tool ORM 对象转换为 MCP tool schema dict（去除 x-position 元数据）"""
+    input_schema = parse_input_schema(tool.parameters)
+    
+    # 清理 x-position 元数据
+    cleaned_properties = {}
+    for prop_name, prop_def in input_schema.get("properties", {}).items():
+        cleaned_def = {k: v for k, v in prop_def.items() if not k.startswith("x-")}
+        cleaned_properties[prop_name] = cleaned_def
+    
+    input_schema["properties"] = cleaned_properties
+    
     return {
         "name": tool.name,
         "description": tool.description or "",
-        "inputSchema": parse_input_schema(tool.parameters),
+        "inputSchema": input_schema,
     }
 
 

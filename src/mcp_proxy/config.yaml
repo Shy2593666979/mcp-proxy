@@ -6,11 +6,17 @@ redis:
 
 server:
   name: mcp-proxy-server
-  base_url: http://localhost:7080
+  base_url: http://127.0.0.1:7080
 
 auth:
   enabled: false
   token: ""
+
+model:
+  api_key: ""
+  base_url: ""
+  model_name: "qwen-plus"
+
 
 session:
   ttl_seconds: 1800

@@ -5,17 +5,17 @@ MCP 注册与工具聚合的业务逻辑层
 import json
 import re
 import uuid
+from loguru import logger
 from typing import Any
-
 from cachetools import TTLCache
 
-from mcp_proxy.api.schemas import RegisterMcpRequest, RegisterMcpResponse
-from mcp_proxy.core.schema_converter import tool_to_mcp_schema
+from mcp_proxy.schemas.register_mcp import RegisterMcpRequest, RegisterMcpResponse
+from mcp_proxy.core.schema_converter import tool_to_mcp_schema, _parse_openapi_schema
 from mcp_proxy.core.execute_tool import RegisterMcpToolExecute
 from mcp_proxy.database.dao.register_mcp import RegisterMcpDao
 from mcp_proxy.database.models.register_mcp import RegisterMcpServer
 from mcp_proxy.database.models.mcp_tool import RegisterMcpTool
-from loguru import logger
+from mcp_proxy.config import settings
 
 _tool_cache: TTLCache = TTLCache(maxsize=200, ttl=300)
 
@@ -50,19 +50,20 @@ def _parse_openapi_tools(schema: dict, base_url: str) -> list[RegisterMcpTool]:
             }
             if "requestBody" in operation:
                 parameters_payload["requestBody"] = operation["requestBody"]
+            parsed_parameters = _parse_openapi_schema(parameters_payload)
 
             api_info = {
-                "url": base_url,
+                "base_url": base_url,
                 "path": path,
                 "method": method.upper(),
-                "contentType": "application/json",
+                "content_type": "application/json",
             }
 
             tools.append(RegisterMcpTool(
                 register_mcp_id="",  # 调用方填充
                 name=tool_name,
                 description=description,
-                parameters=json.dumps(parameters_payload),
+                parameters=json.dumps(parsed_parameters),
                 api_info=api_info,
             ))
 
@@ -107,7 +108,10 @@ class RegisterMcpService:
                 await RegisterMcpDao.save_tool(t)
 
         _tool_cache.pop(mcp_id, None)
-        return RegisterMcpResponse(mcp_id=mcp_id, name=name, tool_count=len(tools))
+
+        suffix = "/sse" if body.transport.lower() == "sse" else ""
+        remote_url = f"{settings.base_url}/mcp/{mcp_id}{suffix}"
+        return RegisterMcpResponse(mcp_id=mcp_id, remote_url=remote_url, name=name, tool_count=len(tools))
 
     @classmethod
     async def get_tools_for_server(cls, server_key: str) -> list[dict]:

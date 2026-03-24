@@ -13,7 +13,7 @@ class RegisterMcpToolExecute:
     async def execute_http_tool(cls, tool: RegisterMcpTool, arguments: dict) -> dict:
         """根据 Tool 的 api_info 执行 HTTP 请求，返回 MCP CallToolResult 格式"""
         api_info = tool.api_info or {}
-        base_url = api_info.get("url", "")
+        base_url = api_info.get("base_url", "")
         path = api_info.get("path", "")
         method = api_info.get("method", "GET").upper()
         content_type = api_info.get("content_type", "application/json")
@@ -23,24 +23,45 @@ class RegisterMcpToolExecute:
         query_params: dict[str, str] = {}
         headers: dict[str, str] = {}
         cookies: dict[str, str] = {}
-        body_bytes: bytes | None = None
+        body_data: dict[str, Any] = {}
 
-        for param_type, param_val in arguments.items():
-            if not isinstance(param_val, dict):
-                continue
-            if param_type == "path":
-                path_vars.update({k: str(v) for k, v in param_val.items()})
-            elif param_type == "query":
-                query_params.update({k: str(v) for k, v in param_val.items()})
-            elif param_type == "header":
-                headers.update({k: str(v) for k, v in param_val.items()})
-            elif param_type == "cookie":
-                cookies.update({k: str(v) for k, v in param_val.items()})
-            elif param_type == "requestBody":
-                body_bytes = cls._encode_body(param_val, content_type)
+        # 解析 parameters schema 获取位置信息
+        import json
+        try:
+            param_schema = json.loads(tool.parameters) if tool.parameters else {}
+        except (json.JSONDecodeError, TypeError):
+            param_schema = {}
+        
+        properties = param_schema.get("properties", {})
 
+        # 根据 x-position 分配参数到正确位置
+        for arg_name, arg_value in arguments.items():
+            prop_def = properties.get(arg_name, {})
+            position = prop_def.get("x-position", "query")  # 默认 query
+            
+            if position == "path":
+                path_vars[arg_name] = str(arg_value)
+            elif position == "query":
+                query_params[arg_name] = str(arg_value)
+            elif position == "header":
+                headers[arg_name] = str(arg_value)
+            elif position == "cookie":
+                cookies[arg_name] = str(arg_value)
+            elif position == "body":
+                # 特殊处理 requestBody（非 object 类型）
+                if arg_name == "requestBody":
+                    body_data = arg_value  # 直接使用整个值
+                else:
+                    body_data[arg_name] = arg_value
+
+        # 替换路径变量
         for var_name, var_val in path_vars.items():
             full_url = full_url.replace(f"{{{var_name}}}", var_val)
+
+        # 编码 body
+        body_bytes: bytes | None = None
+        if body_data:
+            body_bytes = cls._encode_body(body_data, content_type)
 
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
