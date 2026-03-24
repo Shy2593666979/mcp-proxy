@@ -22,5 +22,8 @@ class Settings:
     session_ttl_seconds: int = _cfg["session"]["ttl_seconds"]
     session_key_prefix: str = _cfg["session"]["key_prefix"]
 
+    model_name: str = _cfg["model"]["model_name"]
+    model_base_url: str = _cfg["model"]["base_url"]
+    model_api_key: str = _cfg["model"]["api_key"]
 
 settings = Settings()
