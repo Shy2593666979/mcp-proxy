@@ -138,61 +138,60 @@ async function loadTaskMessages(taskId) {
         
         if (task && task.messages && task.messages.length > 0) {
             chatMessages.innerHTML = task.messages.map(msg => {
-                // 渲染内容数组
-                let contentHtml = '';
                 const content = msg.content || [];
-                
-                // 用于去重事件（同一个 title 只显示最后一次）
-                const eventMap = new Map();
-                
+
+                // 按顺序构建块列表：连续 text 合并为一块，event 单独一块
+                const blocks = [];
+                const eventMap = new Map(); // title -> block index，用于原地更新
+
                 content.forEach(item => {
                     if (item.type === 'text') {
-                        // 文本内容
-                        contentHtml += `<div style="white-space: pre-wrap;">${escapeHtml(item.data)}</div>`;
+                        const last = blocks[blocks.length - 1];
+                        if (last && last.type === 'text') {
+                            last.data += item.data;
+                        } else {
+                            blocks.push({ type: 'text', data: item.data });
+                        }
                     } else if (item.type === 'event') {
-                        // 事件内容
-                        const event = item.data;
-                        const title = event.title || '事件';
-                        
-                        // 同一个 title 只保留最后一个
-                        eventMap.set(title, event);
+                        const ev = item.data;
+                        const title = ev.title || '事件';
+                        const existingIdx = eventMap.get(title);
+                        if (existingIdx !== undefined) {
+                            // 原地更新已有事件块
+                            blocks[existingIdx].ev = ev;
+                        } else {
+                            eventMap.set(title, blocks.length);
+                            blocks.push({ type: 'event', ev });
+                        }
                     }
                 });
-                
-                // 在文本前插入所有事件
-                let eventsHtml = '';
-                eventMap.forEach((event, title) => {
-                    const status = event.is_error ? 'ERROR' : (event.status || 'END');
-                    const message = event.content || '';
-                    const statusText = status === 'START' ? '进行中' : status === 'END' ? '已完成' : '失败';
-                    
-                    eventsHtml += `
-                        <div class="event-item ${status}">
-                            <div class="event-header" onclick="toggleEventMessage(this)">
-                                <span class="event-icon"></span>
-                                <span class="event-title">${escapeHtml(title)}</span>
-                                <span class="event-status">${statusText}</span>
-                                <span class="event-toggle">展开</span>
-                            </div>
-                            <div class="event-message">${escapeHtml(message)}</div>
-                        </div>
-                    `;
-                });
-                
-                // 组合最终内容
-                const finalContent = eventsHtml + contentHtml;
-                
+
+                const blocksHtml = blocks.map(block => {
+                    if (block.type === 'text') {
+                        const rendered = typeof marked !== 'undefined'
+                            ? marked.parse(block.data)
+                            : escapeHtml(block.data);
+                        return `<div class="text-container">${rendered}</div>`;
+                    } else {
+                        const ev = block.ev;
+                        const status = ev.is_error ? 'ERROR' : (ev.status || 'END');
+                        const message = ev.content || '';
+                        const statusText = status === 'START' ? '进行中' : status === 'END' ? '已完成' : '失败';
+                        return `<div class="event-item ${status}"><div class="event-header" onclick="toggleEventMessage(this)"><span class="event-icon"></span><span class="event-title">${escapeHtml(ev.title || '事件')}</span><span class="event-status">${statusText}</span><span class="event-toggle">展开</span></div><div class="event-message">${escapeHtml(message)}</div></div>`;
+                    }
+                }).join('');
+
                 return `
                     <div class="message-group user">
                         <div class="message-content-wrapper">
                             <div class="message-content">${escapeHtml(msg.query)}</div>
                         </div>
-                        <div class="message-avatar">👤</div>
+                        <div class="message-avatar"><img src="user.svg" alt="user"></div>
                     </div>
                     <div class="message-group assistant">
-                        <div class="message-avatar">🤖</div>
+                        <div class="message-avatar"><img src="robot.svg" alt="assistant"></div>
                         <div class="message-content-wrapper">
-                            <div class="message-content">${finalContent}</div>
+                            <div class="message-content markdown-body">${blocksHtml}</div>
                         </div>
                     </div>
                 `;
@@ -230,11 +229,6 @@ function toggleEventMessage(headerElement) {
 
 // 发送消息
 async function sendMessage() {
-    if (!currentTaskId) {
-        alert('请先创建或选择一个对话');
-        return;
-    }
-    
     const input = document.getElementById('messageInput');
     const query = input.value.trim();
     
@@ -245,6 +239,25 @@ async function sendMessage() {
     if (isStreaming) {
         alert('正在处理中，请稍候');
         return;
+    }
+    
+    // 如果没有当前任务，自动创建一个
+    if (!currentTaskId) {
+        try {
+            const response = await fetch(`${API_BASE}/task/create`, { method: 'POST' });
+            const result = await response.json();
+            if (result.data && result.data.id) {
+                currentTaskId = result.data.id;
+                await loadTaskList();
+            } else {
+                alert('创建对话失败');
+                return;
+            }
+        } catch (error) {
+            console.error('创建任务失败:', error);
+            alert('创建对话失败');
+            return;
+        }
     }
     
     // 清空输入框并重置高度
@@ -270,7 +283,7 @@ async function sendMessage() {
         <div class="message-content-wrapper">
             <div class="message-content">${escapeHtml(query)}</div>
         </div>
-        <div class="message-avatar">👤</div>
+        <div class="message-avatar"><img src="user.svg" alt="user"></div>
     `;
     chatMessages.appendChild(userMessageGroup);
     
@@ -280,36 +293,41 @@ async function sendMessage() {
     
     const avatar = document.createElement('div');
     avatar.className = 'message-avatar';
-    avatar.textContent = '🤖';
+    avatar.innerHTML = '<img src="robot.svg" alt="assistant">';
     
     const contentWrapper = document.createElement('div');
     contentWrapper.className = 'message-content-wrapper';
     
-    // 文本内容区域（包含事件和文本）
+    // 外层消息容器
     const contentDiv = document.createElement('div');
-    contentDiv.className = 'message-content';
+    contentDiv.className = 'message-content markdown-body';
     contentWrapper.appendChild(contentDiv);
-    
+
     assistantMessageGroup.appendChild(avatar);
     assistantMessageGroup.appendChild(contentWrapper);
     chatMessages.appendChild(assistantMessageGroup);
     scrollToBottom();
-    
-    // 事件状态管理（同一个 title 只显示一次）
-    const eventMap = new Map();
-    let textContent = '';
-    
-    // 更新或创建事件
+
+    // 按顺序追踪当前块
+    const eventMap = new Map();   // title -> eventItem（用于更新已有事件）
+    let currentTextContainer = null;  // 当前正在追加的文本块
+    let currentTextContent = '';      // 当前文本块的累积内容
+
+    // 更新或创建事件（在当前位置插入，之后文本另起新块）
     function updateEvent(eventData) {
         const title = eventData.title || '事件';
         const status = eventData.is_error ? 'ERROR' : (eventData.status || 'START');
         const message = eventData.content || '';
         const statusText = status === 'START' ? '进行中' : status === 'END' ? '已完成' : '失败';
-        
+
         let eventItem = eventMap.get(title);
-        
+
         if (!eventItem) {
-            // 创建新事件元素
+            // 新事件：顺序插入到 contentDiv 末尾
+            // 同时关闭当前文本块，下次 text 另起新块
+            currentTextContainer = null;
+            currentTextContent = '';
+
             eventItem = document.createElement('div');
             eventItem.className = `event-item ${status}`;
             eventItem.innerHTML = `
@@ -321,36 +339,32 @@ async function sendMessage() {
                 </div>
                 <div class="event-message">${escapeHtml(message)}</div>
             `;
-            
-            // 插入到内容区域
             contentDiv.appendChild(eventItem);
             eventMap.set(title, eventItem);
         } else {
-            // 更新已有事件
+            // 已有事件：原地更新状态，不移动位置
             eventItem.className = `event-item ${status}`;
             eventItem.querySelector('.event-status').textContent = statusText;
             if (message) {
                 eventItem.querySelector('.event-message').textContent = message;
             }
         }
-        
+
         scrollToBottom();
     }
-    
-    // 添加文本内容
+
+    // 追加文本：连续 text 复用同一个块，event 之后另起新块
     function appendText(text) {
-        textContent += text;
-        
-        // 查找或创建文本容器
-        let textContainer = contentDiv.querySelector('.text-container');
-        if (!textContainer) {
-            textContainer = document.createElement('div');
-            textContainer.className = 'text-container';
-            textContainer.style.whiteSpace = 'pre-wrap';
-            contentDiv.appendChild(textContainer);
+        if (!currentTextContainer) {
+            currentTextContainer = document.createElement('div');
+            currentTextContainer.className = 'text-container';
+            contentDiv.appendChild(currentTextContainer);
+            currentTextContent = '';
         }
-        
-        textContainer.textContent = textContent;
+        currentTextContent += text;
+        currentTextContainer.innerHTML = typeof marked !== 'undefined'
+            ? marked.parse(currentTextContent)
+            : escapeHtml(currentTextContent);
         scrollToBottom();
     }
     
@@ -369,30 +383,27 @@ async function sendMessage() {
         
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
+        let buffer = '';
         
         while (true) {
             const { done, value } = await reader.read();
             
-            if (done) {
-                break;
-            }
+            if (done) break;
             
-            const chunk = decoder.decode(value, { stream: true });
-            const lines = chunk.split('\n');
+            buffer += decoder.decode(value, { stream: true });
+            
+            // 按换行切割，保留最后一个不完整的行
+            const lines = buffer.split('\n');
+            buffer = lines.pop(); // 最后一段可能不完整，留到下次
             
             for (const line of lines) {
                 if (line.startsWith('data: ')) {
                     try {
                         const data = JSON.parse(line.substring(6));
-                        console.log('收到数据:', data); // 调试日志
                         
                         if (data.type === 'text') {
-                            // 文本内容：流式拼接
-                            console.log('文本内容:', data.content);
                             appendText(data.content);
                         } else if (data.type === 'event') {
-                            // 事件：实时更新
-                            console.log('事件数据:', data.event);
                             updateEvent(data.event || data);
                         }
                     } catch (error) {

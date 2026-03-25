@@ -83,7 +83,6 @@ async def completion(
                     })
                     yield f'data: {json.dumps(event, ensure_ascii=False)}\n\n'
                 else:
-                    print(event)
                     # 事件内容
                     content_array.append({
                         "type": "event",

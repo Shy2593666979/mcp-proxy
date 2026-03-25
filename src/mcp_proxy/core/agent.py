@@ -7,7 +7,7 @@ import json
 from langchain.agents import create_agent
 from langchain.tools import tool, ToolRuntime
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessageChunk
 from langgraph.config import get_stream_writer
 from pydantic import ValidationError
 
@@ -41,11 +41,7 @@ def generate_mcp_json(user_query: str, runtime: ToolRuntime) -> str:
     })
 
     # 直接返回带前缀的 prompt，让调用方（agent）知道要生成什么
-    # 实际生成由 LLM 在 agent loop 中处理，这里返回 prompt 信号
     # 注意：工具本身调用独立的 LLM 来完成生成
-    import asyncio
-    from langchain_openai import ChatOpenAI
-    from langchain_core.messages import HumanMessage
 
     client = ChatOpenAI(
         model=settings.model_name,
@@ -53,7 +49,10 @@ def generate_mcp_json(user_query: str, runtime: ToolRuntime) -> str:
         base_url=settings.model_base_url,
     )
 
-    response = client.invoke([HumanMessage(content=GENERATE_MCP_JSON_PROMPT + user_query)])
+    response = client.invoke(
+        input=[HumanMessage(content=GENERATE_MCP_JSON_PROMPT + user_query)],
+        config={"callbacks": []}
+    )
 
     mcp_json_str = response.content
 
@@ -142,9 +141,6 @@ def restore_mcp_json(mcp_json_str: str, error_message: str, runtime: ToolRuntime
         "content": ""
     })
 
-    import asyncio
-    from langchain_openai import ChatOpenAI
-    from langchain_core.messages import HumanMessage, SystemMessage
 
     client = ChatOpenAI(
         model=settings.model_name,
@@ -170,7 +166,7 @@ def restore_mcp_json(mcp_json_str: str, error_message: str, runtime: ToolRuntime
 
 
 @tool
-def register_mcp_server(mcp_json_str: str, runtime: ToolRuntime) -> str:
+async def register_mcp_server(mcp_json_str: str, runtime: ToolRuntime) -> str:
     """将已通过校验的 MCP JSON 注册为 MCP Server。
     只有在 verify_mcp_json 返回 VERIFY_SUCCESS 后才调用此工具。
 
@@ -186,7 +182,6 @@ def register_mcp_server(mcp_json_str: str, runtime: ToolRuntime) -> str:
         "content": ""
     })
 
-    import asyncio
 
     async def _register():
         try:
@@ -203,7 +198,7 @@ def register_mcp_server(mcp_json_str: str, runtime: ToolRuntime) -> str:
         except Exception as e:
             return False, str(e)
 
-    ok, result = asyncio.get_event_loop().run_until_complete(_register())
+    ok, result = await _register()
 
     if not ok:
         writer({
@@ -275,10 +270,9 @@ class AbstractMcpAgent:
             stream_mode=["messages", "custom"],
             version="v2",
         ):
-            print(part)
             if part["type"] == "messages":
                 msg, metadata = part["data"]
-                if msg.content:
+                if msg.content and isinstance(msg, AIMessageChunk):
                     yield {
                         "type": "text",
                         "content": msg.content,
