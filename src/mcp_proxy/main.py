@@ -2,18 +2,26 @@
 MCP Proxy Python - FastAPI + MySQL 版本
 """
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import redis.asyncio as aioredis
 from loguru import logger
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from mcp_proxy.api.register_mcp import router as register_mcp
 from mcp_proxy.api.mcp_sse import router as mcp_router
+from mcp_proxy.api.completion import router as completion_router
+from mcp_proxy.api.register_task import router as register_task_router
 from mcp_proxy.api.mcp_streamable_http import router as mcp_streamable_http_router
 from mcp_proxy.config import settings
 from mcp_proxy.database.session import init_db
 from mcp_proxy.service.session.manager import SessionManager
+
+# 获取项目根目录
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+STATIC_DIR = BASE_DIR / "static"
 
 
 @asynccontextmanager
@@ -41,11 +49,16 @@ app.add_middleware(
 app.include_router(mcp_router)
 app.include_router(register_mcp)
 app.include_router(mcp_streamable_http_router)
-
+app.include_router(completion_router)
+app.include_router(register_task_router)
 
 @app.get("/health")
 async def health():
     return {"status": "UP", "service": "mcp-proxy"}
+
+# 挂载静态文件（必须放在最后，避免覆盖 API 路由）
+if STATIC_DIR.exists():
+    app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
 
 if __name__ == "__main__":
     import uvicorn

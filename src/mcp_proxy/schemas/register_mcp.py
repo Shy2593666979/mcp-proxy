@@ -45,17 +45,17 @@ class RegisterMcpToolApiInfo(BaseModel):
     method: str
     content_type: str
 
-class RegisterMcpTool(BaseModel):
+class RegisterMcpToolModel(BaseModel):
     name: str
     description: str = ""
     parameters: RegisterMcpToolParameter
     api_info: RegisterMcpToolApiInfo
 
-class RegisterMcpServer(BaseModel):
+class RegisterMcpServerModel(BaseModel):
     name: str
     transport: Literal["sse", "streamable_http"] = "sse"
     description: str = ""
-    tools: List[RegisterMcpTool] = []
+    tools: List[RegisterMcpToolModel] = Field(..., min_length=1)
 
 
 

@@ -9,7 +9,7 @@ from loguru import logger
 from typing import Any
 from cachetools import TTLCache
 
-from mcp_proxy.schemas.register_mcp import RegisterMcpRequest, RegisterMcpResponse
+from mcp_proxy.schemas.register_mcp import RegisterMcpRequest, RegisterMcpResponse, RegisterMcpServerModel
 from mcp_proxy.core.schema_converter import tool_to_mcp_schema, _parse_openapi_schema
 from mcp_proxy.core.execute_tool import RegisterMcpToolExecute
 from mcp_proxy.database.dao.register_mcp import RegisterMcpDao
@@ -93,11 +93,14 @@ class RegisterMcpService:
         for t in tools:
             t.register_mcp_id = mcp_id
 
+
+        remote_url = cls._generate_remote_url(mcp_id, body.transport)
         existing = await RegisterMcpDao.get_by_id(mcp_id)
         if not existing:
             mcp = RegisterMcpServer(
                 id=mcp_id,
                 name=name,
+                remote_url=remote_url,
                 transport=body.transport,
                 description=description,
             )
@@ -109,9 +112,37 @@ class RegisterMcpService:
 
         _tool_cache.pop(mcp_id, None)
 
-        suffix = "/sse" if body.transport.lower() == "sse" else ""
-        remote_url = f"{settings.base_url}/mcp/{mcp_id}{suffix}"
+
         return RegisterMcpResponse(mcp_id=mcp_id, remote_url=remote_url, name=name, tool_count=len(tools))
+
+
+    @classmethod
+    async def register_mcp_by_completion(cls, server: RegisterMcpServerModel, mcp_id: str=None, ):
+        register_mcp_id = mcp_id or str(uuid.uuid4())
+        remote_url = cls._generate_remote_url(register_mcp_id, server.transport)
+        mcp_tools = []
+        mcp_server = RegisterMcpServer(
+            id=register_mcp_id,
+            name=server.name,
+            remote_url=remote_url,
+            description=server.description,
+            transport=server.transport
+        )
+
+        for tool in server.tools:
+            mcp_tools.append(
+                RegisterMcpTool(
+                    name=tool.name,
+                    register_mcp_id=register_mcp_id,
+                    description=tool.description,
+                    parameters=json.dumps(tool.parameters.model_dump()),
+                    api_info=tool.api_info.model_dump()
+                )
+            )
+
+        await RegisterMcpDao.save_mcp_with_tools(mcp_server, mcp_tools)
+        return RegisterMcpResponse(mcp_id=register_mcp_id, remote_url=remote_url, name=server.name, tool_count=len(mcp_tools))
+
 
     @classmethod
     async def get_tools_for_server(cls, server_key: str) -> list[dict]:
@@ -130,3 +161,10 @@ class RegisterMcpService:
             logger.warning(f"Tool not found: {tool_name} in server: {server_key}")
             return {"isError": True, "content": [{"type": "text", "text": f"Tool not found: {tool_name}"}]}
         return await RegisterMcpToolExecute.execute_http_tool(tool, arguments)
+
+
+    @classmethod
+    def _generate_remote_url(cls, mcp_id, transport):
+        suffix = "/sse" if transport.lower() == "sse" else ""
+        remote_url = f"{settings.base_url}/mcp/{mcp_id}{suffix}"
+        return remote_url

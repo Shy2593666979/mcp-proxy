@@ -13,6 +13,8 @@ class RegisterMcpServer(SQLModel, table=True):
     id: str = Field(default_factory=generate_uuid, primary_key=True, max_length=64)
     name: str = Field(max_length=255)
     transport: str = Field(default="sse")
+    remote_url: Optional[str] = Field(default=None)
+    user_id: Optional[str] = Field(default=None)
     description: Optional[str] = Field(default=None, sa_column=Column(Text))
     created_time: datetime = Field(
         default_factory=get_now_time,
