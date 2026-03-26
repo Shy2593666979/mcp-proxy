@@ -7,12 +7,12 @@ class RegisterMcpRequest(BaseModel):
     通过 OpenAPI 3.1+ schema 注册 MCP 服务。
 
     - `mcp_id`         可选，不传则自动生成 UUID
-    - `name`           可选，合法标识符（字母/数字/下划线），不传则从 openapi_schema.info.title 推断
+    - `name`           必传，则从 openapi_schema.info.title 推断
     - `description`    可选，服务描述，不传则从 openapi_schema.info.description 推断
     - `openapi_schema` 必传，标准 OpenAPI 3.1+ 文档对象
     """
     mcp_id: Optional[str] = None
-    name: Optional[str] = Field(default=None, pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")
+    name: str
     transport: Literal["sse", "streamable_http"] = "sse"
     user_id: Optional[str] = None
     description: Optional[str] = None

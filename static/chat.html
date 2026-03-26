@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Proxy Chat</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <style>
+        :root[data-theme="dark"] {
+            --bg-primary: #1a1a1a;
+            --bg-secondary: #2d2d2d;
+            --bg-tertiary: #3a3a3a;
+            --bg-hover: #404040;
+            --text-primary: #e8e8e8;
+            --text-secondary: #a0a0a0;
+            --border-color: #404040;
+            --user-msg-bg: #2563eb;
+            --assistant-msg-bg: #2d2d2d;
+            --input-bg: #2d2d2d;
+            --event-bg: rgba(251, 191, 36, 0.1);
+            --event-border: #fbbf24;
+            --event-text: #fbbf24;
+        }
+
+        :root[data-theme="light"] {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f7f7f8;
+            --bg-tertiary: #ececf1;
+            --bg-hover: #e5e5e5;
+            --text-primary: #1a1a1a;
+            --text-secondary: #6b6b6b;
+            --border-color: #d9d9e3;
+            --user-msg-bg: #2563eb;
+            --assistant-msg-bg: #f7f7f8;
+            --input-bg: #ffffff;
+            --event-bg: rgba(251, 191, 36, 0.1);
+            --event-border: #fbbf24;
+            --event-text: #d97706;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            height: 100vh;
+            display: flex;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            transition: background 0.3s, color 0.3s;
+        }
+
+        /* 左侧任务列表 */
+        .sidebar {
+            width: 280px;
+            background: var(--bg-secondary);
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid var(--border-color);
+        }
+
+        .sidebar-header {
+            padding: 16px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .sidebar-actions {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .new-task-btn {
+            flex: 1;
+            padding: 10px 14px;
+            background: var(--user-msg-bg);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: opacity 0.2s;
+        }
+
+        .new-task-btn:hover {
+            opacity: 0.9;
+        }
+
+        .theme-toggle-btn {
+            width: 40px;
+            padding: 10px;
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+
+        .theme-toggle-btn:hover {
+            background: var(--bg-hover);
+        }
+
+        .sidebar-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .task-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+        }
+
+        .task-list::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .task-list::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .task-list::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 3px;
+        }
+
+        .task-item {
+            padding: 12px;
+            margin-bottom: 4px;
+            background: transparent;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.2s;
+            border: 1px solid transparent;
+            position: relative;
+        }
+
+        .task-item:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .task-item.active {
+            background: var(--bg-tertiary);
+            border-color: var(--user-msg-bg);
+        }
+
+        .task-delete-btn {
+            position: absolute;
+            right: 8px;
+            bottom: 8px;
+            width: 28px;
+            height: 28px;
+            background: transparent;
+            color: var(--text-secondary);
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            padding: 0;
+        }
+
+        .task-item:hover .task-delete-btn {
+            display: flex;
+        }
+
+        .task-delete-btn:hover {
+            background: rgba(239, 68, 68, 0.15);
+            color: #ef4444;
+        }
+
+        .task-delete-btn svg {
+            width: 14px;
+            height: 14px;
+        }
+
+        .task-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+
+        .task-item-title {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        .task-item-time {
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+
+        .task-item-preview {
+            font-size: 12px;
+            color: var(--text-secondary);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* 主聊天区域 */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: var(--bg-primary);
+        }
+
+        .chat-header {
+            padding: 16px 24px;
+            border-bottom: 1px solid var(--border-color);
+            background: var(--bg-primary);
+        }
+
+        .chat-header h1 {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px;
+        }
+
+        .chat-messages::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .chat-messages::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .chat-messages::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 3px;
+        }
+
+        .message-group {
+            margin-bottom: 24px;
+            display: flex;
+            gap: 12px;
+        }
+
+        .message-group.user {
+            justify-content: flex-end;
+        }
+
+        .message-group.assistant {
+            justify-content: flex-start;
+        }
+
+        .message-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            overflow: hidden;
+        }
+
+        .message-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .message-group.user .message-avatar {
+            order: 2;
+        }
+
+        .message-group.assistant .message-avatar {
+        }
+
+        .message-content-wrapper {
+            max-width: 65%;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .message-content {
+            padding: 12px 16px;
+            border-radius: 16px;
+            line-height: 1.5;
+            font-size: 15px;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+
+        .message-group.user .message-content {
+            white-space: pre-wrap;
+            background: var(--user-msg-bg);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message-group.assistant .message-content {
+            background: var(--assistant-msg-bg);
+            color: var(--text-primary);
+            border-bottom-left-radius: 4px;
+            padding: 6px 10px;
+        }
+
+        /* 事件展示区域 */
+        .event-item {
+            margin: 0 0 4px 0;
+            padding: 5px 10px;
+            border-radius: 8px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            flex-direction: column;
+            border-left: 3px solid;
+        }
+
+        .event-item.START {
+            background: rgba(37, 99, 235, 0.08);
+            border-left-color: #2563eb;
+        }
+
+        .event-item.END {
+            background: rgba(34, 197, 94, 0.08);
+            border-left-color: #22c55e;
+        }
+
+        .event-item.ERROR {
+            background: rgba(239, 68, 68, 0.08);
+            border-left-color: #ef4444;
+        }
+
+        .event-item:hover {
+            transform: translateX(2px);
+        }
+
+        .event-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .event-icon {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .event-item.START .event-icon {
+            background: #2563eb;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        .event-item.END .event-icon {
+            background: #22c55e;
+            position: relative;
+        }
+
+        .event-item.END .event-icon::after {
+            content: '✓';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 10px;
+            font-weight: bold;
+        }
+
+        .event-item.ERROR .event-icon {
+            background: #ef4444;
+            position: relative;
+        }
+
+        .event-item.ERROR .event-icon::after {
+            content: '✕';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 10px;
+            font-weight: bold;
+        }
+
+        .event-title {
+            font-weight: 600;
+            flex: 1;
+        }
+
+        .event-item.START .event-title {
+            color: #2563eb;
+        }
+
+        .event-item.END .event-title {
+            color: #22c55e;
+        }
+
+        .event-item.ERROR .event-title {
+            color: #ef4444;
+        }
+
+        .event-status {
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-weight: 500;
+        }
+
+        .event-item.START .event-status {
+            background: rgba(37, 99, 235, 0.15);
+            color: #2563eb;
+        }
+
+        .event-item.END .event-status {
+            background: rgba(34, 197, 94, 0.15);
+            color: #22c55e;
+        }
+
+        .event-item.ERROR .event-status {
+            background: rgba(239, 68, 68, 0.15);
+            color: #ef4444;
+        }
+
+        .event-toggle {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-left: 8px;
+        }
+
+        .event-message {
+            margin-top: 8px;
+            padding: 8px;
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 6px;
+            font-size: 12px;
+            line-height: 1.5;
+            color: var(--text-primary);
+            display: none;
+        }
+
+        .event-message.show {
+            display: block;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.6; transform: scale(0.95); }
+        }
+
+        /* 输入区域 */
+        .chat-input-wrapper {
+            padding: 20px 24px;
+            background: var(--bg-primary);
+            border-top: 1px solid var(--border-color);
+        }
+
+        .chat-input-container {
+            max-width: 800px;
+            margin: 0 auto;
+            position: relative;
+        }
+
+        .chat-input {
+            width: 100%;
+            padding: 14px 52px 14px 16px;
+            background: var(--input-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 15px;
+            resize: none;
+            max-height: 200px;
+            overflow-y: auto;
+            line-height: 1.5;
+            transition: border-color 0.2s;
+        }
+
+        .chat-input::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .chat-input::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .chat-input::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 3px;
+        }
+
+        .chat-input:focus {
+            outline: none;
+            border-color: var(--user-msg-bg);
+        }
+
+        .chat-input::placeholder {
+            color: var(--text-secondary);
+        }
+
+        .send-btn {
+            position: absolute;
+            right: 10px;
+            bottom: 10px;
+            width: 36px;
+            height: 36px;
+            background: var(--user-msg-bg);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.2s;
+        }
+
+        .send-btn:hover:not(:disabled) {
+            opacity: 0.9;
+        }
+
+        .send-btn:disabled {
+            background: var(--border-color);
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
+        .send-btn svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        /* 空状态 */
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--text-secondary);
+        }
+
+        .empty-state-icon {
+            font-size: 64px;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+
+        .empty-state-text {
+            font-size: 18px;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        .empty-state-hint {
+            font-size: 14px;
+            opacity: 0.7;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        /* Markdown 渲染样式 */
+        .text-container {
+            padding: 4px 0;
+        }
+        .message-content.markdown-body p {
+            margin: 0 0 4px 0;
+        }
+        .message-content.markdown-body p:last-child {
+            margin-bottom: 0;
+        }
+        .message-content.markdown-body h1,
+        .message-content.markdown-body h2,
+        .message-content.markdown-body h3,
+        .message-content.markdown-body h4 {
+            margin: 12px 0 6px 0;
+            font-weight: 600;
+        }
+        .message-content.markdown-body ul,
+        .message-content.markdown-body ol {
+            padding-left: 20px;
+            margin: 6px 0;
+        }
+        .message-content.markdown-body li {
+            margin: 3px 0;
+        }
+        .message-content.markdown-body code {
+            background: rgba(128,128,128,0.2);
+            padding: 2px 5px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+        }
+        .message-content.markdown-body pre {
+            background: rgba(0,0,0,0.3);
+            padding: 12px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 8px 0;
+        }
+        .message-content.markdown-body pre code {
+            background: none;
+            padding: 0;
+        }
+        .message-content.markdown-body blockquote {
+            border-left: 3px solid var(--border-color);
+            padding-left: 12px;
+            margin: 8px 0;
+            color: var(--text-secondary);
+        }
+        .message-content.markdown-body table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 8px 0;
+        }
+        .message-content.markdown-body th,
+        .message-content.markdown-body td {
+            border: 1px solid var(--border-color);
+            padding: 6px 10px;
+        }
+        .message-content.markdown-body a {
+            color: #60a5fa;
+            text-decoration: underline;
+        }
+        .message-content.markdown-body hr {
+            border: none;
+            border-top: 1px solid var(--border-color);
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <!-- 左侧任务列表 -->
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-actions">
+                <button class="new-task-btn" onclick="createNewTask()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                    新建
+                </button>
+                <button class="theme-toggle-btn" onclick="toggleTheme()" title="切换主题">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="5"></circle>
+                        <line x1="12" y1="1" x2="12" y2="3"></line>
+                        <line x1="12" y1="21" x2="12" y2="23"></line>
+                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                        <line x1="1" y1="12" x2="3" y2="12"></line>
+                        <line x1="21" y1="12" x2="23" y2="12"></line>
+                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="sidebar-title">对话历史</div>
+        </div>
+        <div class="task-list" id="taskList">
+            <div class="loading">加载中...</div>
+        </div>
+    </div>
+
+    <!-- 主聊天区域 -->
+    <div class="main-content">
+        <div class="chat-header">
+            <h1>MCP Proxy Chat</h1>
+        </div>
+        <div class="chat-messages" id="chatMessages">
+            <div class="empty-state">
+                <div class="empty-state-icon">💬</div>
+                <div class="empty-state-text">开始新的对话</div>
+                <div class="empty-state-hint">选择或创建一个对话开始聊天</div>
+            </div>
+        </div>
+        <div class="chat-input-wrapper">
+            <div class="chat-input-container">
+                <textarea 
+                    id="messageInput" 
+                    class="chat-input"
+                    placeholder="输入消息... (Enter 发送，Shift+Enter 换行)" 
+                    rows="1"
+                    onkeydown="handleKeyDown(event)"
+                    oninput="autoResize(this)"
+                ></textarea>
+                <button class="send-btn" id="sendBtn" onclick="sendMessage()" title="发送">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="chat.js"></script>
+</body>
+</html>

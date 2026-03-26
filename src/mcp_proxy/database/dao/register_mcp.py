@@ -1,4 +1,6 @@
 from typing import Optional
+
+from sqlalchemy.orm import selectinload
 from sqlmodel import select, delete
 
 from mcp_proxy.database.models.mcp_tool import RegisterMcpTool
@@ -15,7 +17,11 @@ class RegisterMcpDao:
     @classmethod
     async def get_all(cls) -> list[RegisterMcpServer]:
         async with async_session_getter() as session:
-            result = await session.exec(select(RegisterMcpServer))
+            result = await session.exec(
+                select(RegisterMcpServer).options(
+                    selectinload(RegisterMcpServer.mcp_tools)
+                )
+            )
             return result.all()
 
     @classmethod

@@ -81,8 +81,8 @@ class RegisterMcpService:
         base_url: str = servers[0].get("url", "") if servers else ""
 
         # 推断 name
-        raw_name = body.name or info_block.get("title", "")
-        name = _slugify(raw_name) if raw_name else "mcp_service"
+        name = body.name or info_block.get("title", "")
+        # name = _slugify(raw_name) if raw_name else "mcp_service"
 
         # 推断 description
         description = body.description or info_block.get("description")

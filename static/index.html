@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MCP Proxy Chat</title>
+    <title>MCP Proxy - 主页</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <style>
         :root[data-theme="dark"] {
             --bg-primary: #1a1a1a;
@@ -13,12 +14,11 @@
             --text-primary: #e8e8e8;
             --text-secondary: #a0a0a0;
             --border-color: #404040;
-            --user-msg-bg: #2563eb;
-            --assistant-msg-bg: #2d2d2d;
-            --input-bg: #2d2d2d;
-            --event-bg: rgba(251, 191, 36, 0.1);
-            --event-border: #fbbf24;
-            --event-text: #fbbf24;
+            --accent-color: #2563eb;
+            --accent-hover: #1d4ed8;
+            --card-shadow: rgba(0, 0, 0, 0.3);
+            --success-color: #22c55e;
+            --danger-color: #ef4444;
         }
 
         :root[data-theme="light"] {
@@ -29,12 +29,11 @@
             --text-primary: #1a1a1a;
             --text-secondary: #6b6b6b;
             --border-color: #d9d9e3;
-            --user-msg-bg: #2563eb;
-            --assistant-msg-bg: #f7f7f8;
-            --input-bg: #ffffff;
-            --event-bg: rgba(251, 191, 36, 0.1);
-            --event-border: #fbbf24;
-            --event-text: #d97706;
+            --accent-color: #2563eb;
+            --accent-hover: #1d4ed8;
+            --card-shadow: rgba(0, 0, 0, 0.1);
+            --success-color: #22c55e;
+            --danger-color: #ef4444;
         }
 
         * {
@@ -45,521 +44,407 @@
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            height: 100vh;
-            display: flex;
             background: var(--bg-primary);
             color: var(--text-primary);
+            min-height: 100vh;
             transition: background 0.3s, color 0.3s;
         }
 
-        /* 左侧任务列表 */
-        .sidebar {
-            width: 280px;
-            background: var(--bg-secondary);
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        /* Header */
+        .header {
             display: flex;
-            flex-direction: column;
-            border-right: 1px solid var(--border-color);
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 48px;
+            position: relative;
         }
 
-        .sidebar-header {
-            padding: 16px;
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        .sidebar-actions {
+        .header-title {
             display: flex;
-            gap: 8px;
-            margin-bottom: 12px;
+            align-items: center;
+            gap: 16px;
         }
 
-        .new-task-btn {
-            flex: 1;
-            padding: 10px 14px;
-            background: var(--user-msg-bg);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 14px;
+        .header-logo {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, var(--accent-color), #3b82f6);
+            border-radius: 12px;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 6px;
-            transition: opacity 0.2s;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
         }
 
-        .new-task-btn:hover {
-            opacity: 0.9;
+        .header-logo svg {
+            width: 28px;
+            height: 28px;
+            color: white;
+        }
+
+        .header h1 {
+            font-size: 36px;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--text-primary), var(--text-secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.5px;
         }
 
         .theme-toggle-btn {
-            width: 40px;
-            padding: 10px;
-            background: var(--bg-tertiary);
+            position: absolute;
+            right: 0;
+            width: 44px;
+            height: 44px;
+            background: var(--bg-secondary);
             color: var(--text-primary);
-            border: none;
-            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: background 0.2s;
+            transition: all 0.2s;
         }
 
         .theme-toggle-btn:hover {
             background: var(--bg-hover);
         }
 
-        .sidebar-title {
-            font-size: 12px;
-            font-weight: 600;
-            color: var(--text-secondary);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 8px;
+        /* Action Cards */
+        .action-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 24px;
+            margin-bottom: 48px;
         }
 
-        .task-list {
-            flex: 1;
-            overflow-y: auto;
-            padding: 8px;
-        }
-
-        .task-list::-webkit-scrollbar {
-            width: 6px;
-        }
-
-        .task-list::-webkit-scrollbar-track {
-            background: transparent;
-        }
-
-        .task-list::-webkit-scrollbar-thumb {
-            background: var(--border-color);
-            border-radius: 3px;
-        }
-
-        .task-item {
-            padding: 12px;
-            margin-bottom: 4px;
-            background: transparent;
-            border-radius: 8px;
+        .action-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 32px;
             cursor: pointer;
-            transition: background 0.2s;
-            border: 1px solid transparent;
-            position: relative;
+            transition: all 0.3s;
+            box-shadow: 0 2px 8px var(--card-shadow);
         }
 
-        .task-item:hover {
-            background: var(--bg-tertiary);
+        .action-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 24px var(--card-shadow);
+            border-color: var(--accent-color);
         }
 
-        .task-item.active {
-            background: var(--bg-tertiary);
-            border-color: var(--user-msg-bg);
-        }
-
-        .task-delete-btn {
-            position: absolute;
-            right: 8px;
-            bottom: 8px;
-            width: 28px;
-            height: 28px;
-            background: transparent;
-            color: var(--text-secondary);
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            display: none;
+        .action-card-icon {
+            width: 56px;
+            height: 56px;
+            background: var(--accent-color);
+            border-radius: 12px;
+            display: flex;
             align-items: center;
             justify-content: center;
-            transition: all 0.2s;
-            padding: 0;
+            margin-bottom: 20px;
         }
 
-        .task-item:hover .task-delete-btn {
-            display: flex;
+        .action-card-icon svg {
+            width: 28px;
+            height: 28px;
+            color: white;
         }
 
-        .task-delete-btn:hover {
-            background: rgba(239, 68, 68, 0.15);
-            color: #ef4444;
+        .action-card h2 {
+            font-size: 22px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: var(--text-primary);
         }
 
-        .task-delete-btn svg {
-            width: 14px;
-            height: 14px;
+        .action-card p {
+            font-size: 15px;
+            color: var(--text-secondary);
+            line-height: 1.6;
         }
 
-        .task-item-header {
+        /* MCP List Section */
+        .mcp-list-section {
+            margin-top: 48px;
+        }
+
+        .section-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 6px;
+            margin-bottom: 24px;
         }
 
-        .task-item-title {
-            font-size: 14px;
-            font-weight: 500;
+        .section-header h2 {
+            font-size: 24px;
+            font-weight: 600;
             color: var(--text-primary);
         }
 
-        .task-item-time {
-            font-size: 11px;
-            color: var(--text-secondary);
-        }
-
-        .task-item-preview {
-            font-size: 12px;
-            color: var(--text-secondary);
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-
-        /* 主聊天区域 */
-        .main-content {
-            flex: 1;
+        .refresh-btn {
+            padding: 10px 20px;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
             display: flex;
-            flex-direction: column;
-            background: var(--bg-primary);
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
         }
 
-        .chat-header {
-            padding: 16px 24px;
-            border-bottom: 1px solid var(--border-color);
-            background: var(--bg-primary);
+        .refresh-btn:hover {
+            background: var(--bg-hover);
         }
 
-        .chat-header h1 {
+        .mcp-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 20px;
+        }
+
+        .mcp-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .mcp-card:hover {
+            border-color: var(--accent-color);
+            box-shadow: 0 4px 12px var(--card-shadow);
+        }
+
+        .mcp-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 12px;
+        }
+
+        .mcp-card-title {
             font-size: 18px;
             font-weight: 600;
             color: var(--text-primary);
+            margin-bottom: 4px;
         }
 
-        .chat-messages {
-            flex: 1;
-            overflow-y: auto;
-            padding: 24px;
+        .mcp-card-id {
+            font-size: 11px;
+            color: var(--text-secondary);
+            font-family: 'Courier New', monospace;
         }
 
-        .chat-messages::-webkit-scrollbar {
-            width: 6px;
+        .mcp-card-description {
+            font-size: 14px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+            margin-bottom: 16px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            min-height: 42px;
         }
 
-        .chat-messages::-webkit-scrollbar-track {
-            background: transparent;
-        }
-
-        .chat-messages::-webkit-scrollbar-thumb {
-            background: var(--border-color);
-            border-radius: 3px;
-        }
-
-        .message-group {
-            margin-bottom: 24px;
+        .mcp-card-footer {
             display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: 12px;
+            border-top: 1px solid var(--border-color);
             gap: 12px;
         }
 
-        .message-group.user {
-            justify-content: flex-end;
-        }
-
-        .message-group.assistant {
-            justify-content: flex-start;
-        }
-
-        .message-avatar {
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
+        .mcp-card-footer-left {
             display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-            overflow: hidden;
-        }
-
-        .message-avatar img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-
-        .message-group.user .message-avatar {
-            order: 2;
-        }
-
-        .message-group.assistant .message-avatar {
-        }
-
-        .message-content-wrapper {
-            max-width: 65%;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-
-        .message-content {
-            padding: 12px 16px;
-            border-radius: 16px;
-            line-height: 1.5;
-            font-size: 15px;
-            word-wrap: break-word;
-            overflow-wrap: break-word;
-        }
-
-        .message-group.user .message-content {
-            white-space: pre-wrap;
-            background: var(--user-msg-bg);
-            color: white;
-            border-bottom-right-radius: 4px;
-        }
-
-        .message-group.assistant .message-content {
-            background: var(--assistant-msg-bg);
-            color: var(--text-primary);
-            border-bottom-left-radius: 4px;
-            padding: 6px 10px;
-        }
-
-        /* 事件展示区域 */
-        .event-item {
-            margin: 0 0 4px 0;
-            padding: 5px 10px;
-            border-radius: 8px;
-            font-size: 13px;
-            cursor: pointer;
-            transition: all 0.2s;
-            display: flex;
-            flex-direction: column;
-            border-left: 3px solid;
-        }
-
-        .event-item.START {
-            background: rgba(37, 99, 235, 0.08);
-            border-left-color: #2563eb;
-        }
-
-        .event-item.END {
-            background: rgba(34, 197, 94, 0.08);
-            border-left-color: #22c55e;
-        }
-
-        .event-item.ERROR {
-            background: rgba(239, 68, 68, 0.08);
-            border-left-color: #ef4444;
-        }
-
-        .event-item:hover {
-            transform: translateX(2px);
-        }
-
-        .event-header {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .event-icon {
-            width: 16px;
-            height: 16px;
-            border-radius: 50%;
-            flex-shrink: 0;
-        }
-
-        .event-item.START .event-icon {
-            background: #2563eb;
-            animation: pulse 1.5s ease-in-out infinite;
-        }
-
-        .event-item.END .event-icon {
-            background: #22c55e;
-            position: relative;
-        }
-
-        .event-item.END .event-icon::after {
-            content: '✓';
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: white;
-            font-size: 10px;
-            font-weight: bold;
-        }
-
-        .event-item.ERROR .event-icon {
-            background: #ef4444;
-            position: relative;
-        }
-
-        .event-item.ERROR .event-icon::after {
-            content: '✕';
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: white;
-            font-size: 10px;
-            font-weight: bold;
-        }
-
-        .event-title {
-            font-weight: 600;
+            gap: 12px;
             flex: 1;
         }
 
-        .event-item.START .event-title {
-            color: #2563eb;
-        }
-
-        .event-item.END .event-title {
-            color: #22c55e;
-        }
-
-        .event-item.ERROR .event-title {
-            color: #ef4444;
-        }
-
-        .event-status {
-            font-size: 11px;
-            padding: 2px 8px;
-            border-radius: 10px;
-            font-weight: 500;
-        }
-
-        .event-item.START .event-status {
-            background: rgba(37, 99, 235, 0.15);
-            color: #2563eb;
-        }
-
-        .event-item.END .event-status {
-            background: rgba(34, 197, 94, 0.15);
-            color: #22c55e;
-        }
-
-        .event-item.ERROR .event-status {
-            background: rgba(239, 68, 68, 0.15);
-            color: #ef4444;
-        }
-
-        .event-toggle {
-            font-size: 11px;
-            color: var(--text-secondary);
-            margin-left: 8px;
-        }
-
-        .event-message {
-            margin-top: 8px;
-            padding: 8px;
-            background: rgba(255, 255, 255, 0.5);
-            border-radius: 6px;
-            font-size: 12px;
-            line-height: 1.5;
-            color: var(--text-primary);
-            display: none;
-        }
-
-        .event-message.show {
-            display: block;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.6; transform: scale(0.95); }
-        }
-
-        /* 输入区域 */
-        .chat-input-wrapper {
-            padding: 20px 24px;
-            background: var(--bg-primary);
-            border-top: 1px solid var(--border-color);
-        }
-
-        .chat-input-container {
-            max-width: 800px;
-            margin: 0 auto;
+        .mcp-card-tools {
             position: relative;
         }
 
-        .chat-input {
-            width: 100%;
-            padding: 14px 52px 14px 16px;
-            background: var(--input-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            color: var(--text-primary);
-            font-family: inherit;
-            font-size: 15px;
-            resize: none;
-            max-height: 200px;
-            overflow-y: auto;
-            line-height: 1.5;
-            transition: border-color 0.2s;
+        .mcp-card-remote-url {
+            position: relative;
         }
 
-        .chat-input::-webkit-scrollbar {
+        .mcp-card-tools-btn,
+        .mcp-card-remote-url-btn {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            font-size: 13px;
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .mcp-card-tools-btn:hover,
+        .mcp-card-remote-url-btn:hover {
+            background: var(--bg-hover);
+            border-color: var(--accent-color);
+        }
+
+        .mcp-card-tools-dropdown,
+        .mcp-card-remote-url-dropdown {
+            display: none;
+            position: absolute;
+            bottom: 100%;
+            left: 0;
+            margin-bottom: 8px;
+            padding-top: 8px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            box-shadow: 0 8px 24px var(--card-shadow);
+            min-width: 300px;
+            max-width: 400px;
+            max-height: 300px;
+            overflow-y: auto;
+            z-index: 100;
+            opacity: 0;
+            transition: opacity 0.2s ease-in-out;
+            pointer-events: none;
+        }
+
+        /* 在按钮和下拉框之间创建一个不可见的桥接区域 */
+        .mcp-card-tools::before,
+        .mcp-card-remote-url::before {
+            content: '';
+            position: absolute;
+            bottom: 100%;
+            left: 0;
+            right: 0;
+            height: 16px;
+            z-index: 99;
+        }
+
+        .mcp-card-tools:hover .mcp-card-tools-dropdown,
+        .mcp-card-tools-dropdown:hover,
+        .mcp-card-remote-url:hover .mcp-card-remote-url-dropdown,
+        .mcp-card-remote-url-dropdown:hover {
+            display: block;
+            opacity: 1;
+            pointer-events: auto;
+            transition-delay: 0s;
+        }
+
+        .mcp-card-remote-url-dropdown {
+            min-width: 350px;
+            max-width: 500px;
+            max-height: none;
+        }
+
+        .mcp-card-tools-dropdown::-webkit-scrollbar {
             width: 6px;
         }
 
-        .chat-input::-webkit-scrollbar-track {
+        .mcp-card-tools-dropdown::-webkit-scrollbar-track {
             background: transparent;
         }
 
-        .chat-input::-webkit-scrollbar-thumb {
+        .mcp-card-tools-dropdown::-webkit-scrollbar-thumb {
             background: var(--border-color);
             border-radius: 3px;
         }
 
-        .chat-input:focus {
-            outline: none;
-            border-color: var(--user-msg-bg);
+        .remote-url-content {
+            padding: 12px 16px;
         }
 
-        .chat-input::placeholder {
-            color: var(--text-secondary);
+        .remote-url-text {
+            font-size: 13px;
+            color: var(--accent-color);
+            font-family: 'Courier New', monospace;
+            word-break: break-all;
+            line-height: 1.6;
+            background: var(--bg-secondary);
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 10px;
         }
 
-        .send-btn {
-            position: absolute;
-            right: 10px;
-            bottom: 10px;
-            width: 36px;
-            height: 36px;
-            background: var(--user-msg-bg);
+        .remote-url-copy-btn {
+            width: 100%;
+            padding: 8px 12px;
+            background: var(--accent-color);
             color: white;
             border: none;
-            border-radius: 8px;
+            border-radius: 6px;
+            font-size: 13px;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: opacity 0.2s;
+            gap: 6px;
+            transition: all 0.2s;
         }
 
-        .send-btn:hover:not(:disabled) {
-            opacity: 0.9;
+        .remote-url-copy-btn:hover {
+            background: var(--accent-hover);
         }
 
-        .send-btn:disabled {
-            background: var(--border-color);
-            cursor: not-allowed;
-            opacity: 0.5;
+        .tool-item {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border-color);
         }
 
-        .send-btn svg {
-            width: 18px;
-            height: 18px;
+        .tool-item:last-child {
+            border-bottom: none;
         }
 
-        /* 空状态 */
+        .tool-item:hover {
+            background: var(--bg-secondary);
+        }
+
+        .tool-item-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .tool-item-description {
+            font-size: 12px;
+            color: var(--text-secondary);
+            line-height: 1.4;
+        }
+
+        .mcp-card-transport {
+            padding: 4px 10px;
+            background: var(--bg-tertiary);
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--accent-color);
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
         .empty-state {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100%;
+            text-align: center;
+            padding: 60px 20px;
             color: var(--text-secondary);
         }
 
@@ -572,156 +457,393 @@
         .empty-state-text {
             font-size: 18px;
             margin-bottom: 8px;
-            font-weight: 500;
         }
 
-        .empty-state-hint {
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background: var(--bg-primary);
+            border-radius: 16px;
+            width: 90%;
+            max-width: 800px;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-header {
+            padding: 24px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h3 {
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .modal-close {
+            width: 32px;
+            height: 32px;
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .modal-close:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+
+        .modal-body {
+            padding: 24px;
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            display: block;
             font-size: 14px;
-            opacity: 0.7;
+            font-weight: 500;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .form-label .required {
+            color: var(--danger-color);
+            margin-left: 4px;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 10px 14px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 14px;
+            color: var(--text-primary);
+            transition: all 0.2s;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--accent-color);
+        }
+
+        .form-select {
+            width: 100%;
+            padding: 10px 14px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 14px;
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .form-select:focus {
+            outline: none;
+            border-color: var(--accent-color);
+        }
+
+        .form-textarea {
+            width: 100%;
+            min-height: 200px;
+            padding: 12px 14px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            color: var(--text-primary);
+            resize: vertical;
+            line-height: 1.6;
+            transition: all 0.2s;
+        }
+
+        .form-textarea:focus {
+            outline: none;
+            border-color: var(--accent-color);
+        }
+
+        .form-hint {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 6px;
+        }
+
+        .json-editor {
+            width: 100%;
+            min-height: 400px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 16px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            color: var(--text-primary);
+            resize: vertical;
+            line-height: 1.6;
+        }
+
+        .json-editor:focus {
+            outline: none;
+            border-color: var(--accent-color);
+        }
+
+        .modal-footer {
+            padding: 20px 24px;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+
+        .btn {
+            padding: 10px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: var(--accent-color);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-hover);
+        }
+
+        .btn-secondary {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-secondary:hover {
+            background: var(--bg-hover);
         }
 
         .loading {
             text-align: center;
-            padding: 20px;
+            padding: 40px;
             color: var(--text-secondary);
-            font-size: 14px;
         }
 
-        /* Markdown 渲染样式 */
-        .text-container {
-            padding: 4px 0;
-        }
-        .message-content.markdown-body p {
-            margin: 0 0 4px 0;
-        }
-        .message-content.markdown-body p:last-child {
-            margin-bottom: 0;
-        }
-        .message-content.markdown-body h1,
-        .message-content.markdown-body h2,
-        .message-content.markdown-body h3,
-        .message-content.markdown-body h4 {
-            margin: 12px 0 6px 0;
-            font-weight: 600;
-        }
-        .message-content.markdown-body ul,
-        .message-content.markdown-body ol {
-            padding-left: 20px;
-            margin: 6px 0;
-        }
-        .message-content.markdown-body li {
-            margin: 3px 0;
-        }
-        .message-content.markdown-body code {
-            background: rgba(128,128,128,0.2);
-            padding: 2px 5px;
-            border-radius: 4px;
-            font-family: 'Courier New', monospace;
-            font-size: 13px;
-        }
-        .message-content.markdown-body pre {
-            background: rgba(0,0,0,0.3);
-            padding: 12px;
+        .error-message {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid var(--danger-color);
+            color: var(--danger-color);
+            padding: 12px 16px;
             border-radius: 8px;
-            overflow-x: auto;
-            margin: 8px 0;
-        }
-        .message-content.markdown-body pre code {
-            background: none;
-            padding: 0;
-        }
-        .message-content.markdown-body blockquote {
-            border-left: 3px solid var(--border-color);
-            padding-left: 12px;
-            margin: 8px 0;
-            color: var(--text-secondary);
-        }
-        .message-content.markdown-body table {
-            border-collapse: collapse;
-            width: 100%;
-            margin: 8px 0;
-        }
-        .message-content.markdown-body th,
-        .message-content.markdown-body td {
-            border: 1px solid var(--border-color);
-            padding: 6px 10px;
-        }
-        .message-content.markdown-body a {
-            color: #60a5fa;
-            text-decoration: underline;
-        }
-        .message-content.markdown-body hr {
-            border: none;
-            border-top: 1px solid var(--border-color);
-            margin: 10px 0;
+            margin-bottom: 16px;
+            font-size: 14px;
         }
     </style>
 </head>
 <body>
-    <!-- 左侧任务列表 -->
-    <div class="sidebar">
-        <div class="sidebar-header">
-            <div class="sidebar-actions">
-                <button class="new-task-btn" onclick="createNewTask()">
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-title">
+                <div class="header-logo">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="11" width="18" height="10" rx="2"></rect>
+                        <circle cx="12" cy="5" r="2"></circle>
+                        <path d="M12 7v4"></path>
+                        <line x1="8" y1="16" x2="8" y2="16"></line>
+                        <line x1="16" y1="16" x2="16" y2="16"></line>
+                    </svg>
+                </div>
+                <h1>MCP Proxy</h1>
+            </div>
+            <button class="theme-toggle-btn" onclick="toggleTheme()" title="切换主题">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="5"></circle>
+                    <line x1="12" y1="1" x2="12" y2="3"></line>
+                    <line x1="12" y1="21" x2="12" y2="23"></line>
+                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                    <line x1="1" y1="12" x2="3" y2="12"></line>
+                    <line x1="21" y1="12" x2="23" y2="12"></line>
+                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                </svg>
+            </button>
+        </div>
+
+        <!-- Action Cards -->
+        <div class="action-cards">
+            <div class="action-card" onclick="window.location.href='chat.html'">
+                <div class="action-card-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                </div>
+                <h2>对话生成 MCP</h2>
+                <p>通过智能对话的方式，逐步引导您创建和配置 MCP 服务</p>
+            </div>
+
+            <div class="action-card" onclick="openJsonModal()">
+                <div class="action-card-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 5v14M5 12h14"></path>
+                    </svg>
+                </div>
+                <h2>一键生成 MCP</h2>
+                <p>直接粘贴 OpenAPI JSON 配置，快速创建 MCP 服务</p>
+            </div>
+        </div>
+
+        <!-- MCP List -->
+        <div class="mcp-list-section">
+            <div class="section-header">
+                <h2>已创建的 MCP 服务</h2>
+                <button class="refresh-btn" onclick="loadMcpList()">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="12" y1="5" x2="12" y2="19"></line>
-                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                        <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"></path>
                     </svg>
-                    新建
+                    刷新
                 </button>
-                <button class="theme-toggle-btn" onclick="toggleTheme()" title="切换主题">
+            </div>
+            <div id="mcpList" class="mcp-grid">
+                <div class="loading">加载中...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JSON Modal -->
+    <div id="jsonModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>一键生成 MCP</h3>
+                <button class="modal-close" onclick="closeJsonModal()">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="12" r="5"></circle>
-                        <line x1="12" y1="1" x2="12" y2="3"></line>
-                        <line x1="12" y1="21" x2="12" y2="23"></line>
-                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
-                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
-                        <line x1="1" y1="12" x2="3" y2="12"></line>
-                        <line x1="21" y1="12" x2="23" y2="12"></line>
-                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
-                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
                     </svg>
                 </button>
             </div>
-            <div class="sidebar-title">对话历史</div>
-        </div>
-        <div class="task-list" id="taskList">
-            <div class="loading">加载中...</div>
+            <div class="modal-body">
+                <div id="errorMessage" class="error-message" style="display: none;"></div>
+                
+                <div class="form-group">
+                    <label class="form-label">
+                        服务名称
+                        <span class="required">*</span>
+                    </label>
+                    <input 
+                        type="text" 
+                        id="mcpName" 
+                        class="form-input" 
+                        placeholder="例如: 用户管理服务"
+                        required
+                    />
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">
+                        服务描述
+                    </label>
+                    <input 
+                        type="text" 
+                        id="mcpDescription" 
+                        class="form-input" 
+                        placeholder="例如: 提供用户增删改查功能的 API 服务"
+                    />
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">
+                        传输协议
+                        <span class="required">*</span>
+                    </label>
+                    <select id="mcpTransport" class="form-select">
+                        <option value="sse">SSE (Server-Sent Events)</option>
+                        <option value="streamable_http">Streamable HTTP</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">
+                        OpenAPI Schema
+                        <span class="required">*</span>
+                    </label>
+                    <textarea 
+                        id="openapiSchema" 
+                        class="form-textarea" 
+                        placeholder='请输入 OpenAPI 3.1+ JSON 配置，例如：
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "My API",
+    "version": "1.0.0",
+    "description": "API description"
+  },
+  "servers": [
+    {
+      "url": "https://api.example.com"
+    }
+  ],
+  "paths": {
+    "/users": {
+      "get": {
+        "summary": "Get users",
+        "operationId": "getUsers",
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    }
+  }
+}'></textarea>
+                    <div class="form-hint">必须是有效的 OpenAPI 3.1+ JSON 格式</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeJsonModal()">取消</button>
+                <button class="btn btn-primary" onclick="submitJson()">创建 MCP</button>
+            </div>
         </div>
     </div>
 
-    <!-- 主聊天区域 -->
-    <div class="main-content">
-        <div class="chat-header">
-            <h1>MCP Proxy Chat</h1>
-        </div>
-        <div class="chat-messages" id="chatMessages">
-            <div class="empty-state">
-                <div class="empty-state-icon">💬</div>
-                <div class="empty-state-text">开始新的对话</div>
-                <div class="empty-state-hint">选择或创建一个对话开始聊天</div>
-            </div>
-        </div>
-        <div class="chat-input-wrapper">
-            <div class="chat-input-container">
-                <textarea 
-                    id="messageInput" 
-                    class="chat-input"
-                    placeholder="输入消息... (Enter 发送，Shift+Enter 换行)" 
-                    rows="1"
-                    onkeydown="handleKeyDown(event)"
-                    oninput="autoResize(this)"
-                ></textarea>
-                <button class="send-btn" id="sendBtn" onclick="sendMessage()" title="发送">
-                    <svg viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>
-                    </svg>
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script src="app.js"></script>
+    <script src="index.js"></script>
 </body>
 </html>
