@@ -34,6 +34,14 @@
 
 ---
 
+## ✨效果展示
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/c15d4982-fd41-49d6-8aa7-2fabb50e9917" width="45%" />
+  <img src="https://github.com/user-attachments/assets/7b939b4c-0ab2-4978-86fa-92db5268fd0e" width="45%" />
+</p>
+
+
 ## 📦 快速开始
 
 ### 前置要求
@@ -67,11 +75,8 @@ pip install -e .
 
 3. **配置环境**
 
-复制配置文件并根据需要修改：
+配置config.yaml文件并根据需要修改：
 
-```bash
-cp src/mcp_proxy/config.yaml.example src/mcp_proxy/config.yaml
-```
 
 4. **启动服务**
 
