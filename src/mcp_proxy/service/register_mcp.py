@@ -100,6 +100,7 @@ class RegisterMcpService:
             mcp = RegisterMcpServer(
                 id=mcp_id,
                 name=name,
+                user_id=body.user_id,
                 remote_url=remote_url,
                 transport=body.transport,
                 description=description,
@@ -117,13 +118,14 @@ class RegisterMcpService:
 
 
     @classmethod
-    async def register_mcp_by_completion(cls, server: RegisterMcpServerModel, mcp_id: str=None, ):
+    async def register_mcp_by_completion(cls, server: RegisterMcpServerModel, mcp_id: str=None, user_id: str=None):
         register_mcp_id = mcp_id or str(uuid.uuid4())
         remote_url = cls._generate_remote_url(register_mcp_id, server.transport)
         mcp_tools = []
         mcp_server = RegisterMcpServer(
             id=register_mcp_id,
             name=server.name,
+            user_id=user_id,
             remote_url=remote_url,
             description=server.description,
             transport=server.transport

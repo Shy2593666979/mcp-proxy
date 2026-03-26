@@ -146,6 +146,7 @@
             cursor: pointer;
             transition: background 0.2s;
             border: 1px solid transparent;
+            position: relative;
         }
 
         .task-item:hover {
@@ -155,6 +156,38 @@
         .task-item.active {
             background: var(--bg-tertiary);
             border-color: var(--user-msg-bg);
+        }
+
+        .task-delete-btn {
+            position: absolute;
+            right: 8px;
+            bottom: 8px;
+            width: 28px;
+            height: 28px;
+            background: transparent;
+            color: var(--text-secondary);
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            padding: 0;
+        }
+
+        .task-item:hover .task-delete-btn {
+            display: flex;
+        }
+
+        .task-delete-btn:hover {
+            background: rgba(239, 68, 68, 0.15);
+            color: #ef4444;
+        }
+
+        .task-delete-btn svg {
+            width: 14px;
+            height: 14px;
         }
 
         .task-item-header {

@@ -14,6 +14,7 @@ class RegisterMcpRequest(BaseModel):
     mcp_id: Optional[str] = None
     name: Optional[str] = Field(default=None, pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")
     transport: Literal["sse", "streamable_http"] = "sse"
+    user_id: Optional[str] = None
     description: Optional[str] = None
     openapi_schema: dict[str, Any]
 
@@ -24,6 +25,8 @@ class RegisterMcpResponse(BaseModel):
     name: str
     tool_count: int
 
+class DeleteMcpTaskRequest(BaseModel):
+    task_id: str
 
 class RegisterMcpToolParameterProperty(BaseModel):
     type: str  # "string", "number", "boolean", "array", "object"

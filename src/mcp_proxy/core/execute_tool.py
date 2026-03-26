@@ -37,7 +37,7 @@ class RegisterMcpToolExecute:
         # 根据 x-position 分配参数到正确位置
         for arg_name, arg_value in arguments.items():
             prop_def = properties.get(arg_name, {})
-            position = prop_def.get("x-position", "query")  # 默认 query
+            position = prop_def.get("x_position", "query")  # 默认 query
             
             if position == "path":
                 path_vars[arg_name] = str(arg_value)

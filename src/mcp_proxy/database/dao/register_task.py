@@ -23,7 +23,7 @@ class RegisterMcpTaskDao:
             )
 
             result = await session.exec(statement)
-            return result
+            await session.commit()
 
     @classmethod
     async def add_task_message(cls, task_id: str, message: dict):

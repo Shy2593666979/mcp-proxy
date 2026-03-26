@@ -70,6 +70,12 @@ async function loadTaskList() {
                             <div class="task-item-time">${formatTime(task.created_time)}</div>
                         </div>
                         <div class="task-item-preview">${escapeHtml(lastMessage)}</div>
+                        <button class="task-delete-btn" onclick="deleteTask('${task.id}', event)" title="删除">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="3 6 5 6 21 6"></polyline>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                            </svg>
+                        </button>
                     </div>
                 `;
             }).join('');
@@ -79,6 +85,50 @@ async function loadTaskList() {
     } catch (error) {
         console.error('加载任务列表失败:', error);
         document.getElementById('taskList').innerHTML = '<div class="loading">加载失败</div>';
+    }
+}
+
+// 删除任务
+async function deleteTask(taskId, event) {
+    // 阻止事件冒泡，避免触发选择任务
+    event.stopPropagation();
+    
+    try {
+        const response = await fetch(`${API_BASE}/task/delete`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                task_id: taskId
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.status_code === 200) {
+            // 如果删除的是当前任务，清空聊天区域
+            if (taskId === currentTaskId) {
+                currentTaskId = null;
+                const chatMessages = document.getElementById('chatMessages');
+                chatMessages.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">💬</div>
+                        <div class="empty-state-text">开始新的对话</div>
+                        <div class="empty-state-hint">选择或创建一个对话开始聊天</div>
+                    </div>
+                `;
+            }
+            
+            // 重新加载任务列表
+            await loadTaskList();
+        } else {
+            console.error('删除任务失败:', result);
+            alert('删除对话失败');
+        }
+    } catch (error) {
+        console.error('删除任务失败:', error);
+        alert('删除对话失败');
     }
 }
 
