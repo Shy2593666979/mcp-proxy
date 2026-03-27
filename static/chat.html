@@ -588,6 +588,41 @@
             font-size: 14px;
         }
 
+        /* 加载动画 */
+        .loading-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 0;
+        }
+
+        .loading-indicator span {
+            width: 6px;
+            height: 6px;
+            background: var(--text-secondary);
+            border-radius: 50%;
+            animation: bounce 1.4s infinite ease-in-out both;
+        }
+
+        .loading-indicator span:nth-child(1) {
+            animation-delay: -0.32s;
+        }
+
+        .loading-indicator span:nth-child(2) {
+            animation-delay: -0.16s;
+        }
+
+        @keyframes bounce {
+            0%, 80%, 100% {
+                transform: scale(0);
+                opacity: 0.3;
+            }
+            40% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
         /* Markdown 渲染样式 */
         .text-container {
             padding: 4px 0;
@@ -646,6 +681,10 @@
         .message-content.markdown-body td {
             border: 1px solid var(--border-color);
             padding: 6px 10px;
+            text-align: center;
+        }
+        .message-content.markdown-body th {
+            font-weight: 600;
         }
         .message-content.markdown-body a {
             color: #60a5fa;
@@ -655,6 +694,202 @@
             border: none;
             border-top: 1px solid var(--border-color);
             margin: 10px 0;
+        }
+
+        /* Interrupt (HITL) 样式 */
+        .interrupt-container {
+            margin: 8px 0;
+            padding: 16px;
+            background: rgba(37, 99, 235, 0.08);
+            border: 1px solid rgba(37, 99, 235, 0.3);
+            border-radius: 12px;
+        }
+
+        .interrupt-description {
+            font-size: 14px;
+            color: var(--text-primary);
+            margin-bottom: 12px;
+            line-height: 1.5;
+        }
+
+        .interrupt-description p {
+            margin: 0 0 8px 0;
+        }
+        .interrupt-description p:last-child {
+            margin-bottom: 0;
+        }
+        .interrupt-description h1,
+        .interrupt-description h2,
+        .interrupt-description h3,
+        .interrupt-description h4 {
+            margin: 12px 0 8px 0;
+            font-weight: 600;
+        }
+        .interrupt-description ul,
+        .interrupt-description ol {
+            padding-left: 20px;
+            margin: 6px 0;
+        }
+        .interrupt-description li {
+            margin: 3px 0;
+        }
+        .interrupt-description code {
+            background: rgba(128,128,128,0.2);
+            padding: 2px 5px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+        }
+        .interrupt-description pre {
+            background: rgba(0,0,0,0.3);
+            padding: 12px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 8px 0;
+        }
+        .interrupt-description pre code {
+            background: none;
+            padding: 0;
+        }
+        .interrupt-description table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 8px 0;
+        }
+        .interrupt-description th,
+        .interrupt-description td {
+            border: 1px solid var(--border-color);
+            padding: 6px 10px;
+            text-align: center;
+        }
+        .interrupt-description th {
+            font-weight: 600;
+            background: rgba(37, 99, 235, 0.1);
+        }
+        .interrupt-description a {
+            color: #60a5fa;
+            text-decoration: underline;
+        }
+        .interrupt-description strong {
+            font-weight: 600;
+        }
+        .interrupt-description em {
+            font-style: italic;
+        }
+
+        .interrupt-preview {
+            margin-bottom: 12px;
+            padding: 12px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .interrupt-preview pre {
+            margin: 0;
+            font-size: 12px;
+            color: var(--text-secondary);
+            font-family: 'Courier New', monospace;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .interrupt-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+
+        .interrupt-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .interrupt-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .interrupt-btn-approve {
+            background: #22c55e;
+            color: white;
+        }
+
+        .interrupt-btn-approve:hover:not(:disabled) {
+            background: #16a34a;
+        }
+
+        .interrupt-btn-reject {
+            background: #ef4444;
+            color: white;
+        }
+
+        .interrupt-btn-reject:hover:not(:disabled) {
+            background: #dc2626;
+        }
+
+        .interrupt-btn-primary {
+            background: var(--user-msg-bg);
+            color: white;
+        }
+
+        .interrupt-btn-primary:hover:not(:disabled) {
+            opacity: 0.9;
+        }
+
+        .interrupt-btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+
+        .interrupt-btn-secondary:hover:not(:disabled) {
+            background: var(--bg-hover);
+        }
+
+        .interrupt-feedback {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(37, 99, 235, 0.3);
+        }
+
+        .interrupt-feedback-input {
+            width: 100%;
+            min-height: 80px;
+            padding: 10px 12px;
+            background: var(--input-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 14px;
+            resize: vertical;
+            margin-bottom: 10px;
+            line-height: 1.5;
+        }
+
+        .interrupt-feedback-input:focus {
+            outline: none;
+            border-color: var(--user-msg-bg);
+        }
+
+        .interrupt-feedback-input::placeholder {
+            color: var(--text-secondary);
+        }
+
+        .interrupt-feedback-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
         }
     </style>
 </head>

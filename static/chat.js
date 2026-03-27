@@ -213,6 +213,9 @@ async function loadTaskMessages(taskId) {
                             eventMap.set(title, blocks.length);
                             blocks.push({ type: 'event', ev });
                         }
+                    } else if (item.type === 'interrupt') {
+                        // 处理 interrupt 类型
+                        blocks.push({ type: 'interrupt', data: item.data });
                     }
                 });
 
@@ -222,13 +225,48 @@ async function loadTaskMessages(taskId) {
                             ? marked.parse(block.data)
                             : escapeHtml(block.data);
                         return `<div class="text-container">${rendered}</div>`;
-                    } else {
+                    } else if (block.type === 'event') {
                         const ev = block.ev;
                         const status = ev.is_error ? 'ERROR' : (ev.status || 'END');
                         const message = ev.content || '';
                         const statusText = status === 'START' ? '进行中' : status === 'END' ? '已完成' : '失败';
                         return `<div class="event-item ${status}"><div class="event-header" onclick="toggleEventMessage(this)"><span class="event-icon"></span><span class="event-title">${escapeHtml(ev.title || '事件')}</span><span class="event-status">${statusText}</span><span class="event-toggle">展开</span></div><div class="event-message">${escapeHtml(message)}</div></div>`;
+                    } else if (block.type === 'interrupt') {
+                        // 渲染历史 interrupt，根据 status 判断是否显示按钮
+                        const interruptData = block.data;
+                        const actionRequests = interruptData.action_requests || [];
+                        const allowedDecisions = interruptData.allowed_decisions || [];
+                        const status = interruptData.status; // false = 未处理，true = 已处理
+                        const description = actionRequests.length > 0 ? actionRequests[0].description : '';
+                        
+                        // 渲染描述（支持 markdown）
+                        const rendered = typeof marked !== 'undefined'
+                            ? marked.parse(description)
+                            : escapeHtml(description);
+                        
+                        let buttonsHtml = '';
+                        if (status === false) {
+                            // 未处理，显示按钮（需要重新绑定事件）
+                            let approveBtn = '';
+                            let rejectBtn = '';
+                            
+                            if (allowedDecisions.includes('approve')) {
+                                approveBtn = '<button class="interrupt-btn interrupt-btn-approve" onclick="handleHistoryInterruptApprove(this)">确认创建</button>';
+                            }
+                            if (allowedDecisions.includes('reject')) {
+                                rejectBtn = '<button class="interrupt-btn interrupt-btn-reject" onclick="handleHistoryInterruptReject(this)">取消并修改</button>';
+                            }
+                            
+                            buttonsHtml = `<div class="interrupt-buttons">${approveBtn}${rejectBtn}</div>`;
+                        } else {
+                            // 已处理，显示提示
+                            buttonsHtml = '<div style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">（已处理）</div>';
+                        }
+                        
+                        const opacityStyle = status === false ? '' : 'opacity: 0.6;';
+                        return `<div class="interrupt-container" style="${opacityStyle}"><div class="interrupt-description">${rendered}</div>${buttonsHtml}</div>`;
                     }
+                    return '';
                 }).join('');
 
                 return `
@@ -356,12 +394,646 @@ async function sendMessage() {
     assistantMessageGroup.appendChild(avatar);
     assistantMessageGroup.appendChild(contentWrapper);
     chatMessages.appendChild(assistantMessageGroup);
+    
+    // 添加加载指示器（只有三个跳动的点）
+    const loadingIndicator = document.createElement('div');
+    loadingIndicator.className = 'loading-indicator';
+    loadingIndicator.innerHTML = `
+        <span></span>
+        <span></span>
+        <span></span>
+    `;
+    contentDiv.appendChild(loadingIndicator);
+    
     scrollToBottom();
 
     // 按顺序追踪当前块
     const eventMap = new Map();   // title -> eventItem（用于更新已有事件）
     let currentTextContainer = null;  // 当前正在追加的文本块
     let currentTextContent = '';      // 当前文本块的累积内容
+
+    // 处理 interrupt 事件（HITL 确认）
+    function handleInterrupt(interruptData, container) {
+        // 关闭当前文本块，interrupt 单独一块
+        currentTextContainer = null;
+        currentTextContent = '';
+
+        const allowedDecisions = interruptData.allowed_decisions || [];
+        const actionRequests = interruptData.action_requests || [];
+        const status = interruptData.status; // false = 未处理，true = 已处理
+        
+        // 创建 interrupt 容器
+        const interruptContainer = document.createElement('div');
+        interruptContainer.className = 'interrupt-container';
+        
+        // 显示描述信息（支持 markdown）
+        if (actionRequests.length > 0 && actionRequests[0].description) {
+            const descDiv = document.createElement('div');
+            descDiv.className = 'interrupt-description';
+            const rendered = typeof marked !== 'undefined'
+                ? marked.parse(actionRequests[0].description)
+                : escapeHtml(actionRequests[0].description);
+            descDiv.innerHTML = rendered;
+            interruptContainer.appendChild(descDiv);
+        }
+        
+        // 只有当 status 为 false（未处理）时才显示按钮
+        if (status === false) {
+            // 创建按钮容器
+            const buttonsDiv = document.createElement('div');
+            buttonsDiv.className = 'interrupt-buttons';
+            
+            // 根据 allowed_decisions 显示按钮
+            if (allowedDecisions.includes('approve')) {
+                const approveBtn = document.createElement('button');
+                approveBtn.className = 'interrupt-btn interrupt-btn-approve';
+                approveBtn.textContent = '确认创建';
+                approveBtn.onclick = () => handleHitlApprove(interruptContainer);
+                buttonsDiv.appendChild(approveBtn);
+            }
+            
+            if (allowedDecisions.includes('reject')) {
+                const rejectBtn = document.createElement('button');
+                rejectBtn.className = 'interrupt-btn interrupt-btn-reject';
+                rejectBtn.textContent = '取消并修改';
+                rejectBtn.onclick = () => handleHitlReject(interruptContainer);
+                buttonsDiv.appendChild(rejectBtn);
+            }
+            
+            interruptContainer.appendChild(buttonsDiv);
+        } else {
+            // status 为 true，表示已处理，显示提示
+            const processedDiv = document.createElement('div');
+            processedDiv.style.fontSize = '12px';
+            processedDiv.style.color = 'var(--text-secondary)';
+            processedDiv.style.marginTop = '8px';
+            processedDiv.textContent = '（已处理）';
+            interruptContainer.appendChild(processedDiv);
+            
+            // 已处理的容器添加半透明效果
+            interruptContainer.style.opacity = '0.6';
+        }
+        
+        container.appendChild(interruptContainer);
+        scrollToBottom();
+    }
+
+    // 处理 HITL approve
+    async function handleHitlApprove(interruptContainer) {
+        // 禁用所有按钮
+        const buttons = interruptContainer.querySelectorAll('.interrupt-btn');
+        buttons.forEach(btn => btn.disabled = true);
+        
+        try {
+            const response = await fetch(`${API_BASE}/completion/hitl/approve`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    task_id: currentTaskId
+                })
+            });
+            
+            // 移除 interrupt 容器
+            interruptContainer.remove();
+            
+            // 处理流式响应
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop();
+                
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        const dataContent = line.substring(6).trim();
+                        if (dataContent === 'DONE') continue;
+                        
+                        try {
+                            const data = JSON.parse(dataContent);
+                            if (data.type === 'text') {
+                                appendText(data.content);
+                            } else if (data.type === 'event') {
+                                updateEvent(data.event || data);
+                            } else if (data.type === 'interrupt') {
+                                handleInterrupt(data.event || data, contentDiv);
+                            }
+                        } catch (error) {
+                            console.error('解析消息失败:', error);
+                        }
+                    }
+                }
+            }
+            
+            await loadTaskList();
+        } catch (error) {
+            console.error('Approve 失败:', error);
+            contentDiv.innerHTML += '<div class="error-message">操作失败，请重试</div>';
+        }
+    }
+
+    // 处理 HITL reject
+    async function handleHitlReject(interruptContainer) {
+        // 禁用所有按钮
+        const buttons = interruptContainer.querySelectorAll('.interrupt-btn');
+        buttons.forEach(btn => btn.disabled = true);
+        
+        // 显示输入框让用户输入修改意见
+        const feedbackDiv = document.createElement('div');
+        feedbackDiv.className = 'interrupt-feedback';
+        feedbackDiv.innerHTML = `
+            <textarea class="interrupt-feedback-input" placeholder="请输入修改意见（留空则直接取消）"></textarea>
+            <div class="interrupt-feedback-buttons">
+                <button class="interrupt-btn interrupt-btn-secondary" onclick="this.closest('.interrupt-container').querySelector('.interrupt-feedback').remove(); this.closest('.interrupt-container').querySelectorAll('.interrupt-btn').forEach(b => b.disabled = false);">取消</button>
+                <button class="interrupt-btn interrupt-btn-primary" onclick="submitHitlReject(this)">提交</button>
+            </div>
+        `;
+        interruptContainer.appendChild(feedbackDiv);
+        feedbackDiv.querySelector('textarea').focus();
+        scrollToBottom();
+    }
+
+    // 提交 reject（全局函数，供内联 onclick 调用）
+    window.submitHitlReject = async function(btnElement) {
+        const interruptContainer = btnElement.closest('.interrupt-container');
+        const feedbackInput = interruptContainer.querySelector('.interrupt-feedback-input');
+        const feedback = feedbackInput.value.trim();
+        
+        // 禁用提交按钮
+        btnElement.disabled = true;
+        
+        try {
+            const response = await fetch(`${API_BASE}/completion/hitl/reject`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    task_id: currentTaskId,
+                    feedback: feedback
+                })
+            });
+            
+            // 移除 interrupt 容器
+            interruptContainer.remove();
+            
+            // 处理流式响应
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop();
+                
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        const dataContent = line.substring(6).trim();
+                        if (dataContent === 'DONE') continue;
+                        
+                        try {
+                            const data = JSON.parse(dataContent);
+                            if (data.type === 'text') {
+                                appendText(data.content);
+                            } else if (data.type === 'event') {
+                                updateEvent(data.event || data);
+                            } else if (data.type === 'interrupt') {
+                                handleInterrupt(data.event || data, contentDiv);
+                            }
+                        } catch (error) {
+                            console.error('解析消息失败:', error);
+                        }
+                    }
+                }
+            }
+            
+            await loadTaskList();
+        } catch (error) {
+            console.error('Reject 失败:', error);
+            contentDiv.innerHTML += '<div class="error-message">操作失败，请重试</div>';
+        }
+    };
+
+    // 处理历史 interrupt 的 approve（全局函数）
+    window.handleHistoryInterruptApprove = async function(btnElement) {
+        const interruptContainer = btnElement.closest('.interrupt-container');
+        const buttons = interruptContainer.querySelectorAll('.interrupt-btn');
+        buttons.forEach(btn => btn.disabled = true);
+        
+        try {
+            const response = await fetch(`${API_BASE}/completion/hitl/approve`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    task_id: currentTaskId
+                })
+            });
+            
+            // 移除 interrupt 容器
+            interruptContainer.remove();
+            
+            // 找到 contentDiv：先尝试找 message-group，如果找不到就找最近的 markdown-body
+            let contentDiv = null;
+            const messageGroup = document.querySelector('.message-group.assistant:last-child');
+            
+            if (messageGroup) {
+                contentDiv = messageGroup.querySelector('.message-content.markdown-body');
+            }
+            
+            // 如果还是找不到，创建一个新的消息组
+            if (!contentDiv) {
+                const chatMessages = document.getElementById('chatMessages');
+                const assistantMessageGroup = document.createElement('div');
+                assistantMessageGroup.className = 'message-group assistant';
+                
+                const avatar = document.createElement('div');
+                avatar.className = 'message-avatar';
+                avatar.innerHTML = '<img src="robot.svg" alt="assistant">';
+                
+                const contentWrapper = document.createElement('div');
+                contentWrapper.className = 'message-content-wrapper';
+                
+                contentDiv = document.createElement('div');
+                contentDiv.className = 'message-content markdown-body';
+                contentWrapper.appendChild(contentDiv);
+
+                assistantMessageGroup.appendChild(avatar);
+                assistantMessageGroup.appendChild(contentWrapper);
+                chatMessages.appendChild(assistantMessageGroup);
+            }
+            
+            // 处理流式响应
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            
+            const eventMap = new Map();
+            let currentTextContainer = null;
+            let currentTextContent = '';
+            
+            function appendText(text) {
+                if (!currentTextContainer) {
+                    currentTextContainer = document.createElement('div');
+                    currentTextContainer.className = 'text-container';
+                    contentDiv.appendChild(currentTextContainer);
+                    currentTextContent = '';
+                }
+                currentTextContent += text;
+                currentTextContainer.innerHTML = typeof marked !== 'undefined'
+                    ? marked.parse(currentTextContent)
+                    : escapeHtml(currentTextContent);
+                scrollToBottom();
+            }
+            
+            function updateEvent(eventData) {
+                const title = eventData.title || '事件';
+                const status = eventData.is_error ? 'ERROR' : (eventData.status || 'START');
+                const message = eventData.content || '';
+                const statusText = status === 'START' ? '进行中' : status === 'END' ? '已完成' : '失败';
+
+                let eventItem = eventMap.get(title);
+
+                if (!eventItem) {
+                    currentTextContainer = null;
+                    currentTextContent = '';
+
+                    eventItem = document.createElement('div');
+                    eventItem.className = `event-item ${status}`;
+                    eventItem.innerHTML = `
+                        <div class="event-header" onclick="toggleEventMessage(this)">
+                            <span class="event-icon"></span>
+                            <span class="event-title">${escapeHtml(title)}</span>
+                            <span class="event-status">${statusText}</span>
+                            <span class="event-toggle">展开</span>
+                        </div>
+                        <div class="event-message">${escapeHtml(message)}</div>
+                    `;
+                    contentDiv.appendChild(eventItem);
+                    eventMap.set(title, eventItem);
+                } else {
+                    eventItem.className = `event-item ${status}`;
+                    eventItem.querySelector('.event-status').textContent = statusText;
+                    if (message) {
+                        eventItem.querySelector('.event-message').textContent = message;
+                    }
+                }
+
+                scrollToBottom();
+            }
+            
+            function handleInterrupt(interruptData, container) {
+                currentTextContainer = null;
+                currentTextContent = '';
+
+                const allowedDecisions = interruptData.allowed_decisions || [];
+                const actionRequests = interruptData.action_requests || [];
+                const status = interruptData.status;
+                
+                const interruptContainer = document.createElement('div');
+                interruptContainer.className = 'interrupt-container';
+                
+                if (actionRequests.length > 0 && actionRequests[0].description) {
+                    const descDiv = document.createElement('div');
+                    descDiv.className = 'interrupt-description';
+                    const rendered = typeof marked !== 'undefined'
+                        ? marked.parse(actionRequests[0].description)
+                        : escapeHtml(actionRequests[0].description);
+                    descDiv.innerHTML = rendered;
+                    interruptContainer.appendChild(descDiv);
+                }
+                
+                if (status === false) {
+                    const buttonsDiv = document.createElement('div');
+                    buttonsDiv.className = 'interrupt-buttons';
+                    
+                    if (allowedDecisions.includes('approve')) {
+                        const approveBtn = document.createElement('button');
+                        approveBtn.className = 'interrupt-btn interrupt-btn-approve';
+                        approveBtn.textContent = '确认创建';
+                        approveBtn.onclick = () => window.handleHistoryInterruptApprove(approveBtn);
+                        buttonsDiv.appendChild(approveBtn);
+                    }
+                    
+                    if (allowedDecisions.includes('reject')) {
+                        const rejectBtn = document.createElement('button');
+                        rejectBtn.className = 'interrupt-btn interrupt-btn-reject';
+                        rejectBtn.textContent = '取消并修改';
+                        rejectBtn.onclick = () => window.handleHistoryInterruptReject(rejectBtn);
+                        buttonsDiv.appendChild(rejectBtn);
+                    }
+                    
+                    interruptContainer.appendChild(buttonsDiv);
+                }
+                
+                container.appendChild(interruptContainer);
+                scrollToBottom();
+            }
+            
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop();
+                
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        const dataContent = line.substring(6).trim();
+                        if (dataContent === 'DONE') continue;
+                        
+                        try {
+                            const data = JSON.parse(dataContent);
+                            if (data.type === 'text') {
+                                appendText(data.content);
+                            } else if (data.type === 'event') {
+                                updateEvent(data.event || data);
+                            } else if (data.type === 'interrupt') {
+                                handleInterrupt(data.event || data, contentDiv);
+                            }
+                        } catch (error) {
+                            console.error('解析消息失败:', error);
+                        }
+                    }
+                }
+            }
+            
+            await loadTaskList();
+        } catch (error) {
+            console.error('Approve 失败:', error);
+            alert('操作失败，请重试');
+        }
+    };
+
+    // 处理历史 interrupt 的 reject（全局函数）
+    window.handleHistoryInterruptReject = async function(btnElement) {
+        const interruptContainer = btnElement.closest('.interrupt-container');
+        const buttons = interruptContainer.querySelectorAll('.interrupt-btn');
+        buttons.forEach(btn => btn.disabled = true);
+        
+        // 显示输入框让用户输入修改意见
+        const feedbackDiv = document.createElement('div');
+        feedbackDiv.className = 'interrupt-feedback';
+        feedbackDiv.innerHTML = `
+            <textarea class="interrupt-feedback-input" placeholder="请输入修改意见（留空则直接取消）"></textarea>
+            <div class="interrupt-feedback-buttons">
+                <button class="interrupt-btn interrupt-btn-secondary" onclick="this.closest('.interrupt-feedback').remove(); this.closest('.interrupt-container').querySelectorAll('.interrupt-btn').forEach(b => b.disabled = false);">取消</button>
+                <button class="interrupt-btn interrupt-btn-primary" onclick="submitHistoryHitlReject(this)">提交</button>
+            </div>
+        `;
+        interruptContainer.appendChild(feedbackDiv);
+        feedbackDiv.querySelector('textarea').focus();
+        scrollToBottom();
+    };
+
+    // 提交历史 interrupt 的 reject（全局函数）
+    window.submitHistoryHitlReject = async function(btnElement) {
+        const interruptContainer = btnElement.closest('.interrupt-container');
+        const feedbackInput = interruptContainer.querySelector('.interrupt-feedback-input');
+        const feedback = feedbackInput.value.trim();
+        
+        btnElement.disabled = true;
+        
+        try {
+            const response = await fetch(`${API_BASE}/completion/hitl/reject`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    task_id: currentTaskId,
+                    feedback: feedback
+                })
+            });
+            
+            // 移除 interrupt 容器
+            interruptContainer.remove();
+            
+            // 找到 contentDiv：先尝试找 message-group，如果找不到就找最近的 markdown-body
+            let contentDiv = null;
+            const messageGroup = document.querySelector('.message-group.assistant:last-child');
+            
+            if (messageGroup) {
+                contentDiv = messageGroup.querySelector('.message-content.markdown-body');
+            }
+            
+            // 如果还是找不到，创建一个新的消息组
+            if (!contentDiv) {
+                const chatMessages = document.getElementById('chatMessages');
+                const assistantMessageGroup = document.createElement('div');
+                assistantMessageGroup.className = 'message-group assistant';
+                
+                const avatar = document.createElement('div');
+                avatar.className = 'message-avatar';
+                avatar.innerHTML = '<img src="robot.svg" alt="assistant">';
+                
+                const contentWrapper = document.createElement('div');
+                contentWrapper.className = 'message-content-wrapper';
+                
+                contentDiv = document.createElement('div');
+                contentDiv.className = 'message-content markdown-body';
+                contentWrapper.appendChild(contentDiv);
+
+                assistantMessageGroup.appendChild(avatar);
+                assistantMessageGroup.appendChild(contentWrapper);
+                chatMessages.appendChild(assistantMessageGroup);
+            }
+            
+            // 处理流式响应（与 approve 相同的逻辑）
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            
+            const eventMap = new Map();
+            let currentTextContainer = null;
+            let currentTextContent = '';
+            
+            function appendText(text) {
+                if (!currentTextContainer) {
+                    currentTextContainer = document.createElement('div');
+                    currentTextContainer.className = 'text-container';
+                    contentDiv.appendChild(currentTextContainer);
+                    currentTextContent = '';
+                }
+                currentTextContent += text;
+                currentTextContainer.innerHTML = typeof marked !== 'undefined'
+                    ? marked.parse(currentTextContent)
+                    : escapeHtml(currentTextContent);
+                scrollToBottom();
+            }
+            
+            function updateEvent(eventData) {
+                const title = eventData.title || '事件';
+                const status = eventData.is_error ? 'ERROR' : (eventData.status || 'START');
+                const message = eventData.content || '';
+                const statusText = status === 'START' ? '进行中' : status === 'END' ? '已完成' : '失败';
+
+                let eventItem = eventMap.get(title);
+
+                if (!eventItem) {
+                    currentTextContainer = null;
+                    currentTextContent = '';
+
+                    eventItem = document.createElement('div');
+                    eventItem.className = `event-item ${status}`;
+                    eventItem.innerHTML = `
+                        <div class="event-header" onclick="toggleEventMessage(this)">
+                            <span class="event-icon"></span>
+                            <span class="event-title">${escapeHtml(title)}</span>
+                            <span class="event-status">${statusText}</span>
+                            <span class="event-toggle">展开</span>
+                        </div>
+                        <div class="event-message">${escapeHtml(message)}</div>
+                    `;
+                    contentDiv.appendChild(eventItem);
+                    eventMap.set(title, eventItem);
+                } else {
+                    eventItem.className = `event-item ${status}`;
+                    eventItem.querySelector('.event-status').textContent = statusText;
+                    if (message) {
+                        eventItem.querySelector('.event-message').textContent = message;
+                    }
+                }
+
+                scrollToBottom();
+            }
+            
+            function handleInterrupt(interruptData, container) {
+                currentTextContainer = null;
+                currentTextContent = '';
+
+                const allowedDecisions = interruptData.allowed_decisions || [];
+                const actionRequests = interruptData.action_requests || [];
+                const status = interruptData.status;
+                
+                const interruptContainer = document.createElement('div');
+                interruptContainer.className = 'interrupt-container';
+                
+                if (actionRequests.length > 0 && actionRequests[0].description) {
+                    const descDiv = document.createElement('div');
+                    descDiv.className = 'interrupt-description';
+                    const rendered = typeof marked !== 'undefined'
+                        ? marked.parse(actionRequests[0].description)
+                        : escapeHtml(actionRequests[0].description);
+                    descDiv.innerHTML = rendered;
+                    interruptContainer.appendChild(descDiv);
+                }
+                
+                if (status === false) {
+                    const buttonsDiv = document.createElement('div');
+                    buttonsDiv.className = 'interrupt-buttons';
+                    
+                    if (allowedDecisions.includes('approve')) {
+                        const approveBtn = document.createElement('button');
+                        approveBtn.className = 'interrupt-btn interrupt-btn-approve';
+                        approveBtn.textContent = '确认创建';
+                        approveBtn.onclick = () => window.handleHistoryInterruptApprove(approveBtn);
+                        buttonsDiv.appendChild(approveBtn);
+                    }
+                    
+                    if (allowedDecisions.includes('reject')) {
+                        const rejectBtn = document.createElement('button');
+                        rejectBtn.className = 'interrupt-btn interrupt-btn-reject';
+                        rejectBtn.textContent = '取消并修改';
+                        rejectBtn.onclick = () => window.handleHistoryInterruptReject(rejectBtn);
+                        buttonsDiv.appendChild(rejectBtn);
+                    }
+                    
+                    interruptContainer.appendChild(buttonsDiv);
+                }
+                
+                container.appendChild(interruptContainer);
+                scrollToBottom();
+            }
+            
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop();
+                
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        const dataContent = line.substring(6).trim();
+                        if (dataContent === 'DONE') continue;
+                        
+                        try {
+                            const data = JSON.parse(dataContent);
+                            if (data.type === 'text') {
+                                appendText(data.content);
+                            } else if (data.type === 'event') {
+                                updateEvent(data.event || data);
+                            } else if (data.type === 'interrupt') {
+                                handleInterrupt(data.event || data, contentDiv);
+                            }
+                        } catch (error) {
+                            console.error('解析消息失败:', error);
+                        }
+                    }
+                }
+            }
+            
+            await loadTaskList();
+        } catch (error) {
+            console.error('Reject 失败:', error);
+            alert('操作失败，请重试');
+        }
+    };
 
     // 更新或创建事件（在当前位置插入，之后文本另起新块）
     function updateEvent(eventData) {
@@ -448,13 +1120,33 @@ async function sendMessage() {
             
             for (const line of lines) {
                 if (line.startsWith('data: ')) {
+                    const dataContent = line.substring(6).trim();
+                    
+                    // 检查是否是 DONE 消息
+                    if (dataContent === 'DONE') {
+                        // 移除加载指示器
+                        const loadingIndicator = contentDiv.querySelector('.loading-indicator');
+                        if (loadingIndicator) {
+                            loadingIndicator.remove();
+                        }
+                        continue;
+                    }
+                    
                     try {
-                        const data = JSON.parse(line.substring(6));
+                        const data = JSON.parse(dataContent);
+                        
+                        // 首次收到数据时移除加载指示器
+                        const loadingIndicator = contentDiv.querySelector('.loading-indicator');
+                        if (loadingIndicator) {
+                            loadingIndicator.remove();
+                        }
                         
                         if (data.type === 'text') {
                             appendText(data.content);
                         } else if (data.type === 'event') {
                             updateEvent(data.event || data);
+                        } else if (data.type === 'interrupt') {
+                            handleInterrupt(data.event || data, contentDiv);
                         }
                     } catch (error) {
                         console.error('解析消息失败:', error, '原始数据:', line);

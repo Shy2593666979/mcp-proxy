@@ -1,4 +1,6 @@
 from typing import Optional, List, Any
+
+from sqlalchemy.ext.mutable import MutableList
 from sqlmodel import SQLModel, Field, Column, Text, Relationship, DateTime, JSON
 from datetime import datetime
 
@@ -23,7 +25,7 @@ class RegisterMcpTask(SQLModel, table=True):
     name: str = Field(default=REGISTER_MCP_TASK_NAME)
     user_id: Optional[str] = Field(default=None)
     register_mcp_id: Optional[str] = Field(default=None)
-    messages: Optional[List[Any]] = Field(default=[], sa_column=Column(JSON))
+    messages: List[Any] = Field(default_factory=list, sa_column=Column(MutableList.as_mutable(JSON)))
     created_time: datetime = Field(
         default_factory=get_now_time,
         sa_column=Column(DateTime, nullable=False, default=get_now_time)
